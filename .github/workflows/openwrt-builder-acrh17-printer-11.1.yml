@@ -17,8 +17,8 @@ on:
   workflow_dispatch:
 
 env:
-  REPO_URL: https://github.com/venpeng/lede
-  REPO_BRANCH: master
+  REPO_URL: https://github.com/immortalwrt/immortalwrt
+  REPO_BRANCH: openwrt-23.05
   FEEDS_CONF: feeds.conf.default
   CONFIG_FILE: config/acrh17/printer/.config
   DIY_P1_SH: diysh/acrh17/diy-part1.sh
@@ -107,7 +107,7 @@ jobs:
         uses: actions/upload-artifact@main
         if: steps.compile.outputs.status == 'success' && env.UPLOAD_BIN_DIR == 'true'
         with:
-          name: OpenWrt_bin${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}_${{ env.LAN_IP }}
+          name: OpenWrt_bin${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}_${{ env.LAN_IP }}_printer
           path: openwrt/bin
 
       - name: Organize files
@@ -123,14 +123,14 @@ jobs:
         uses: actions/upload-artifact@main
         if: steps.organize.outputs.status == 'success' && !cancelled()
         with:
-          name: OpenWrt_firmware${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}_${{ env.LAN_IP }}
+          name: OpenWrt_firmware${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}_${{ env.LAN_IP }}_printer
           path: ${{ env.FIRMWARE }}
 
       - name: Generate release tag
         id: tag
         if: env.UPLOAD_RELEASE == 'true' && !cancelled()
         run: |
-          echo "release_tag=$(date +"%Y.%m.%d_%H%M")${{ env.DEVICE_NAME }}_${{ env.LAN_IP }}" >> $GITHUB_OUTPUT
+          echo "release_tag=$(date +"%Y.%m.%d_%H%M")${{ env.DEVICE_NAME }}_${{ env.LAN_IP }}_printer" >> $GITHUB_OUTPUT
           touch release.txt
           [ ${UPLOAD_GOFILE} = true && ${{ steps.gofile.outputs.url }} ] && echo "🔗 [GoFile](${{ steps.gofile.outputs.url }})" >> release.txt
           echo "status=success" >> $GITHUB_OUTPUT
