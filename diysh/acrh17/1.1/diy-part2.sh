@@ -22,9 +22,10 @@
 # 修改wifi名称
 sed -i 's/OpenWrt/ASUS/g' package/kernel/mac80211/files/lib/wifi/mac80211.sh
 
-# 下载ServerChan
-git clone https://github.com/tty228/luci-app-wechatpush ../diy/luci-app-wechatpush
+# 下载wechatpush
+#git clone https://github.com/tty228/luci-app-wechatpush ../diy/luci-app-wechatpush
+git clone https://github.com/tty228/luci-app-wechatpush ./package/lean/luci-app-wechatpush
 
 #echo '集成diy目录'
-ln -s ../../diy ./package/openwrt-packages
+#ln -s ../../diy ./package/openwrt-packages
 
