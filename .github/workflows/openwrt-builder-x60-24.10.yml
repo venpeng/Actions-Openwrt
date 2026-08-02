@@ -10,7 +10,7 @@
 # See /LICENSE for more information.
 #
 
-name: OpenWrt Builder For X60 Master
+name: OpenWrt Builder For X60 24.10
 
 on:
   repository_dispatch:
@@ -18,15 +18,16 @@ on:
 
 env:
   REPO_URL: https://github.com/immortalwrt/immortalwrt.git
-  REPO_BRANCH: master
+  REPO_BRANCH: openwrt-24.10
   FEEDS_CONF: feeds.conf.default
-  CONFIG_FILE: config/x60/.config
+  CONFIG_FILE: config/x60/2410/.config
   DIY_P1_SH: diysh/x60/diy-part1.sh
   DIY_P2_SH: diysh/x60/diy-part2.sh
   UPLOAD_BIN_DIR: false
   UPLOAD_FIRMWARE: true
   UPLOAD_RELEASE: true
   TZ: Asia/Shanghai
+  RELEASE: 25.12
 
 jobs:
   build:
@@ -106,7 +107,7 @@ jobs:
         uses: actions/upload-artifact@main
         if: steps.compile.outputs.status == 'success' && env.UPLOAD_BIN_DIR == 'true'
         with:
-          name: OpenWrt_bin${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
+          name: OpenWrt_bin${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}_${{ env.RELEASE }}
           path: openwrt/bin
 
       - name: Organize files
@@ -122,7 +123,7 @@ jobs:
         uses: actions/upload-artifact@main
         if: steps.organize.outputs.status == 'success' && !cancelled()
         with:
-          name: OpenWrt_firmware${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
+          name: OpenWrt_firmware${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}_${{ env.RELEASE }}
           path: ${{ env.FIRMWARE }}
 
       - name: Generate release tag
