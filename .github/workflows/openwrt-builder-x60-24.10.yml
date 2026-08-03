@@ -27,7 +27,7 @@ env:
   UPLOAD_FIRMWARE: true
   UPLOAD_RELEASE: true
   TZ: Asia/Shanghai
-  RELEASE: 25.12
+  RELEASE: 24.10
 
 jobs:
   build:
