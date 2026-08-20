@@ -18,7 +18,7 @@ on:
 
 env:
   REPO_URL: https://github.com/venpeng/immortalwrt
-  REPO_BRANCH: openwrt-23.05-eol
+  REPO_BRANCH: openwrt-23.05-final
   FEEDS_CONF: feeds.conf.default
   CONFIG_FILE: config/acrh17/ipv6/.config
   DIY_P1_SH: diysh/acrh17/diy-part1.sh
