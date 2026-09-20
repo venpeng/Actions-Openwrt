@@ -20,7 +20,7 @@ env:
   REPO_URL: https://github.com/Yuzhii0718/immortalwrt-mt798x-6.6-padavanonly.git
   REPO_BRANCH: openwrt-24.10-6.6
   FEEDS_CONF: feeds.conf.default
-  CONFIG_FILE: config/n60-pro/.config
+  CONFIG_FILE: config/n60-pro/yuzhii0718/.config
   DIY_P1_SH: diysh/n60-pro/diy-part1.sh
   DIY_P2_SH: diysh/n60-pro/diy-part2.sh
   UPLOAD_BIN_DIR: false
