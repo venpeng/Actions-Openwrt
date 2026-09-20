@@ -10,7 +10,7 @@
 # See /LICENSE for more information.
 #
 
-name: OpenWrt Builder For N60 Pro
+name: OpenWrt Builder For N60 Pro Yuzhii0718
 
 on:
   repository_dispatch:
