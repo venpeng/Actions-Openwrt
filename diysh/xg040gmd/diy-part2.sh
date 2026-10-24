@@ -36,3 +36,15 @@
 #sed -i 's/ImmortalWrt/ASUS/g' package/kernel/mac80211/files/lib/wifi/mac80211.sh
 #sed -i "s/\.ssid=.*/\.ssid=$WRT_WIFI/g" $(find ./package/kernel/mac80211/ ./package/network/config/ -type f -name "mac80211.*")
 
+# ---------------------------------------------------------
+# 修复python3编译错误
+# ---------------------------------------------------------
+if [ -f .config ]; then
+  # libffi：见 diy-part1.sh 的同名段落。源码树原本没有这个包，
+  # python3(3.14) 的 _ctypes 却必须要它的 ffi.h / libffi.pc，
+  # 缺了就 fatal error 拖垮 world。这里显式打开 target 版，
+  # 让 Build/InstallDev 把头文件装进 staging_dir。
+  sed -i '/^CONFIG_PACKAGE_libffi=/d; /^# CONFIG_PACKAGE_libffi is not set/d' .config
+  echo "CONFIG_PACKAGE_libffi=y           # python3 _ctypes 需要 ffi.h / libffi.pc" >> .config
+  echo "✅ libffi 已加入 .config"
+fi
