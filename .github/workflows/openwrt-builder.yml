@@ -143,6 +143,7 @@ jobs:
 
           {
             echo "SOURCE=$SOURCE"
+            echo "SOURCE_NAME=$SOURCE"          # diy-part*.sh 里文档用的名字，别名一份
             echo "SOURCE_SLUG=$SOURCE_SLUG"
             echo "BRANCH=$BRANCH"
             echo "BRANCH_SLUG=$BRANCH_SLUG"

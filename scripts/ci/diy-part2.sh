@@ -19,6 +19,14 @@
 
 set -euo pipefail
 
+# ---- 环境变量兜底 ----
+# 同上：变量没注入时给默认值，不能让 set -u 打断构建
+SOURCE_NAME="${SOURCE_NAME:-${SOURCE:-unknown}}"
+REPO_URL="${REPO_URL:-（未设置）}"
+BRANCH="${BRANCH:-（未设置）}"
+DEVICE="${DEVICE:-}"
+EXTRA_PLUGINS="${EXTRA_PLUGINS:-false}"
+
 echo "== diy-part2 =="
 
 # ---- 示例：改默认 LAN IP（按需取消注释）----

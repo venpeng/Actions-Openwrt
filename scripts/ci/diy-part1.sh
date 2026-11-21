@@ -24,6 +24,15 @@
 
 set -euo pipefail
 
+# ---- 环境变量兜底 ----
+# 下面 echo 会引用这些变量，脚本被单独调用（或 workflow 改了变量名）时
+# 不能让 set -u 因为一个未定义变量把整次构建打断。
+SOURCE_NAME="${SOURCE_NAME:-${SOURCE:-unknown}}"
+REPO_URL="${REPO_URL:-（未设置）}"
+BRANCH="${BRANCH:-（未设置）}"
+DEVICE="${DEVICE:-}"
+EXTRA_PLUGINS="${EXTRA_PLUGINS:-false}"
+
 echo "== diy-part1 =="
 echo "源码: ${SOURCE_NAME} (${REPO_URL})"
 echo "分支: ${BRANCH}"
