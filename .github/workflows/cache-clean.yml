@@ -1,0 +1,88 @@
+# =============================================================
+# Cache Clean —— 手动清理构建缓存
+#
+# 用途：缓存配额（每仓库 10GB）吃紧、或者怀疑缓存被污染时用。
+# 默认 dry_run=true，先看清楚有哪些 key，再改成 false 真删。
+#
+# 建议前缀：
+#   mt7986-padavanonly-            该源码的全部缓存
+#   mt7986-padavanonly-openwrt-24.10-6.6   同上（分支写全）
+#   mt7986-yuzhii0718-             另一份源码
+# =============================================================
+
+name: Cache Clean
+
+on:
+  workflow_dispatch:
+    inputs:
+      prefix:
+        description: '要清理的 key 前缀（必填），例：mt7986-padavanonly-'
+        required: true
+        type: string
+      dry_run:
+        description: '只列出不删除（先跑一次 true 看清楚，再改 false）'
+        required: true
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+
+permissions:
+  actions: write
+
+jobs:
+  clean:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: List & clean caches
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          PREFIX: ${{ inputs.prefix }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -uo pipefail
+
+          if [ -z "${PREFIX}" ]; then
+            echo "::error::前缀不能为空 —— 不做「全删」这种操作"
+            exit 1
+          fi
+
+          echo "===== 当前仓库缓存 ====="
+          gh cache list -R "$GH_REPO" --limit 100 \
+            --json key,sizeInBytes,lastAccessedAt \
+            --jq '.[] | [(.sizeInBytes/1048576|floor|tostring)+" MB", .key, .lastAccessedAt] | @tsv' \
+            | sort -k2 | sed 's/^/  /' || echo "  （无）"
+
+          echo ""
+          echo "===== 匹配前缀 ${PREFIX} ====="
+          TARGETS=$(gh cache list -R "$GH_REPO" --key "$PREFIX" --limit 100 --json id,key \
+                     --jq '.[] | [.id,.key] | @tsv' 2>/dev/null || true)
+
+          if [ -z "$TARGETS" ]; then
+            echo "  没有匹配的缓存"
+            exit 0
+          fi
+          printf '%s\n' "$TARGETS" | awk -F'\t' '{printf "  %-60s id=%s\n", $2, $1}'
+
+          if [ "$DRY_RUN" = "true" ]; then
+            echo ""
+            echo "dry_run=true，未删除。确认无误后把 dry_run 改成 false 重跑。"
+            exit 0
+          fi
+
+          echo ""
+          FAIL=0
+          while IFS=$'\t' read -r id key; do
+            [ -n "${id:-}" ] || continue
+            if gh cache delete "$id" -R "$GH_REPO" 2>/dev/null; then
+              echo "  已删除 $key"
+            else
+              echo "::warning::删除失败 $key"
+              FAIL=$((FAIL + 1))
+            fi
+          done <<< "$TARGETS"
+
+          echo ""
+          echo "完成，失败 ${FAIL} 个"

@@ -1,0 +1,8 @@
+# 归一化换行：仓库在 Windows 上编辑，Linux runner 上编译，
+# 混用 CRLF 会让 .config / shell 脚本在 CI 里出现「值末尾带 \r」这类怪问题。
+*.config  text eol=lf
+*.sh      text eol=lf
+*.yml     text eol=lf
+*.yaml    text eol=lf
+*.md      text eol=lf
+*.txt     text eol=lf

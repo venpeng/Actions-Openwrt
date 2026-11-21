@@ -1,0 +1,22 @@
+# =============================================================
+# 机型清单 —— 下拉里的 all 就是编这里列出的全部机型
+#
+# 一行一个机型名（必须和源码树 image/*.mk 里的 define Device/<名字> 一致）。
+# 单机型下拉只放了最常用的两个，需要别的布局时：
+#   1) 把机型名加到这里，all 就会带上它；
+#   2) 或者临时把机型名加到 workflow 的 device options 里。
+#
+# 当前两个机型：
+#   锐捷 X60      → ruijie_rg-x60-new-expand（扩容分区）
+#   锐捷 X60 Pro  → ruijie_rg-x60-pro-107m（107M 分区）
+#
+# 其它可用布局（按需加，两份源码设备不完全一致）：
+#   ruijie_rg-x60-new           原厂分区
+#   ruijie_rg-x60-new-stock     原厂固件分区
+#   ruijie_rg-x60-new-ubootmod  OpenWrt U-Boot 布局
+#   ruijie_rg-x60-new-ubi       UBI 布局（仅 Yuzhii0718 源码有）
+#   ruijie_rg-x60-pro           原厂分区
+# =============================================================
+
+ruijie_rg-x60-new-expand
+ruijie_rg-x60-pro-107m

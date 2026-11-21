@@ -1,0 +1,17 @@
+## 插件
+LuCI ---> Applications ---> luci-app-autoreboot  #支持计划重启
+
+LuCI ---> Applications ---> luci-app-ddns   #动态域名 DNS
+
+LuCI ---> Applications ---> luci-app-homeproxy #HomeProxy代理
+
+LuCI ---> Applications ---> luci-app-ttyd   #ttyd终端
+
+LuCI ---> Applications ---> luci-app-upnp   #通用即插即用UPnP（端口自动转发）
+
+LuCI ---> Applications ---> luci-app-wechatpush   #微信推送的插件
+
+LuCI ---> Applications ---> luci-app-wol   #WOL网络唤醒
+
+## 插件增强
+Network ---> IP Addresses and Names ---> ddns-scripts-cloudflare

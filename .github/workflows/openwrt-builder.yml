@@ -1,0 +1,622 @@
+# =============================================================
+# Build ImmortalWrt MT7986 —— 锐捷 X60 / X60 Pro 统一编译流水线
+#
+# 一次下拉解决四件事：
+#   1. 源码仓库（padavanonly 原版 / Yuzhii0718 二次开发）与分支
+#   2. 机型（X60 / X60 Pro，或 all = config/devices.txt 里列出的全部机型）
+#   3. 是否编译额外插件（清单：config/extra-packages.config）
+#   4. 工具链 + dl 下载缓存（参考 Actions-OpenWrt-AN758X / OpenWRT-CI）
+#
+# 配置结构：
+#   config/base/<源码>.config        基础配置（不含机型符号、不含额外插件）
+#   config/extra-packages.config     额外插件清单
+#   机型 → 由 scripts/ci/gen-config.sh 在 defconfig 前追加设备符号
+#
+# 缓存 key：mt7986-<源码>-<分支>-tc-<提交号>   （机型不进 key，两台机器共用一份）
+# 缓存清理：cache-rollover 每个前缀只留当前这一代
+# =============================================================
+
+name: Build ImmortalWrt MT7986
+
+on:
+  repository_dispatch:
+  workflow_dispatch:
+    inputs:
+      source:
+        description: '源码仓库：padavanonly = 上游原版；yuzhii0718 = 二次开发（多 rg-x60-new-ubi）'
+        required: true
+        default: padavanonly
+        type: choice
+        options:
+          - padavanonly
+          - yuzhii0718
+      branch:
+        description: '源码分支。默认 openwrt-24.10-6.6（两个仓库都有）；padavanonly 另有 mt7988-6.6-mt76 / mt798x-mt799x-6.6-mtwifi / 2410，yuzhii0718 另有 dev-an8811 / mtk-switch'
+        required: true
+        default: openwrt-24.10-6.6
+        type: string
+      device:
+        description: '机型：X60 → ruijie_rg-x60-new-expand，X60 Pro → ruijie_rg-x60-pro-107m；all = config/devices.txt 里列出的全部机型'
+        required: true
+        default: ruijie_rg-x60-new-expand
+        type: choice
+        options:
+          - ruijie_rg-x60-new-expand
+          - ruijie_rg-x60-pro-107m
+          - all
+      extra_plugins:
+        description: '编译额外插件（清单见 config/extra-packages.config）'
+        required: true
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+      scope:
+        description: '构建范围：firmware = 完整固件；toolchain-only = 只编工具链并写缓存（预热用）'
+        required: true
+        default: firmware
+        type: choice
+        options:
+          - firmware
+          - toolchain-only
+      cache:
+        description: '构建缓存：enable = 恢复并保存；disable = 冷编译（不读不写，用于排障）'
+        required: true
+        default: enable
+        type: choice
+        options:
+          - enable
+          - disable
+      upload_release:
+        description: '固件发布到 Release（false 则只上传 Artifact）'
+        required: true
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+
+# contents:write 发布 Release；actions:write 清理旧缓存
+permissions:
+  contents: write
+  actions: write
+
+env:
+  BUILD_ROOT: /workdir
+  TZ: Asia/Shanghai
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    # 冷编译（工具链 + 全量包 + 多机型）约 100~180 分钟，留足余量
+    timeout-minutes: 350
+    outputs:
+      cache: ${{ steps.resolve.outputs.cache }}
+      prefix: ${{ steps.cache-key.outputs.prefix }}
+      tc_key: ${{ steps.cache-key.outputs.tc_key }}
+      dl_key: ${{ steps.cache-key.outputs.dl_key }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      # ---------------------------------------------------------------
+      # 输入解析：把下拉项翻译成地址、配置路径、命名
+      # ---------------------------------------------------------------
+      - name: Resolve inputs
+        id: resolve
+        run: |
+          SOURCE="${{ inputs.source || 'padavanonly' }}"
+          BRANCH="${{ inputs.branch || 'openwrt-24.10-6.6' }}"
+          DEVICE="${{ inputs.device || 'ruijie_rg-x60-new-expand' }}"
+          EXTRA="${{ inputs.extra_plugins || 'true' }}"
+          SCOPE="${{ inputs.scope || 'firmware' }}"
+          CACHE="${{ inputs.cache || 'enable' }}"
+          RELEASE="${{ inputs.upload_release || 'true' }}"
+
+          case "$SOURCE" in
+            padavanonly)
+              REPO_URL="https://github.com/padavanonly/immortalwrt-mt798x-6.6.git" ;;
+            yuzhii0718)
+              REPO_URL="https://github.com/Yuzhii0718/immortalwrt-mt798x-6.6-padavanonly.git" ;;
+            *)
+              echo "::error::未知源码 '$SOURCE'，只支持 padavanonly / yuzhii0718"; exit 1 ;;
+          esac
+
+          # 分支先验证再 clone，省得跑到一半才发现写错
+          if ! git ls-remote --exit-code --heads "$REPO_URL" "$BRANCH" >/dev/null 2>&1; then
+            echo "::error::分支 ${BRANCH} 在 ${REPO_URL} 上不存在。可用分支："
+            git ls-remote --heads "$REPO_URL" | sed 's#.*refs/heads/#    #' | sort || true
+            exit 1
+          fi
+
+          CONFIG_BASE="config/base/${SOURCE}.config"
+          [ -f "$CONFIG_BASE" ] || { echo "::error::缺基础配置 $CONFIG_BASE"; exit 1; }
+
+          SOURCE_SLUG=$(printf '%s' "$SOURCE" | tr -c 'A-Za-z0-9._-' '-')
+          BRANCH_SLUG=$(printf '%s' "$BRANCH" | tr -c 'A-Za-z0-9._-' '-')
+          DEVICE_NAME="${SOURCE}-${DEVICE}"
+          TAG_SAFE=$(printf '%s-%s-%s' "$SOURCE" "$DEVICE" "$(date +%Y%m%d-%H%M)" | tr -c 'A-Za-z0-9._-' '-')
+
+          {
+            echo "SOURCE=$SOURCE"
+            echo "SOURCE_SLUG=$SOURCE_SLUG"
+            echo "BRANCH=$BRANCH"
+            echo "BRANCH_SLUG=$BRANCH_SLUG"
+            echo "REPO_URL=$REPO_URL"
+            echo "DEVICE=$DEVICE"
+            echo "DEVICE_NAME=$DEVICE_NAME"
+            echo "EXTRA_PLUGINS=$EXTRA"
+            echo "CONFIG_BASE=$CONFIG_BASE"
+            echo "FILE_DATE=$(date +%Y%m%d)"
+            echo "TAG_SAFE=$TAG_SAFE"
+          } >> "$GITHUB_ENV"
+
+          {
+            echo "repo_url=$REPO_URL"
+            echo "branch=$BRANCH"
+            echo "source=$SOURCE"
+            echo "source_slug=$SOURCE_SLUG"
+            echo "branch_slug=$BRANCH_SLUG"
+            echo "device=$DEVICE"
+            echo "device_name=$DEVICE_NAME"
+            echo "extra=$EXTRA"
+            echo "scope=$SCOPE"
+            echo "cache=$CACHE"
+            echo "release=$RELEASE"
+            echo "config_base=$CONFIG_BASE"
+            echo "tag=$TAG_SAFE"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "### 本次构建"
+            echo ""
+            echo "| 项 | 值 |"
+            echo "| --- | --- |"
+            echo "| 源码 | \`${SOURCE}\` |"
+            echo "| 仓库 | ${REPO_URL} |"
+            echo "| 分支 | \`${BRANCH}\` |"
+            echo "| 机型 | \`${DEVICE}\` |"
+            echo "| 额外插件 | ${EXTRA} |"
+            echo "| 构建范围 | ${SCOPE} |"
+            echo "| 缓存 | ${CACHE} |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # ---------------------------------------------------------------
+      # 环境准备：清空间 + 8G swap + 编译依赖
+      # ---------------------------------------------------------------
+      - name: Prepare build environment
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          # 预装大件清掉，约回收 10~12GB
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+            /opt/hostedtoolcache/CodeQL /usr/local/share/boost /usr/lib/jvm \
+            /usr/local/share/powershell /usr/share/swift 2>/dev/null || true
+          sudo docker image prune --all --force 2>/dev/null || true
+          sudo -E apt-get -yqq purge firefox snapd 2>/dev/null || true
+
+          # 8G swap：16G 内存跑 -j4 的 aarch64 编译，峰值会顶到 swap
+          sudo swapoff -a 2>/dev/null || true
+          sudo rm -f /swapfile
+          sudo fallocate -l 8G /swapfile
+          sudo chmod 600 /swapfile
+          sudo mkswap /swapfile >/dev/null && sudo swapon /swapfile
+
+          sudo -E apt-get -yqq update
+          sudo -E apt-get -yqq install \
+            ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential \
+            bzip2 ccache clang cmake cpio curl device-tree-compiler dos2unix dwarves \
+            fastjar flex g++-multilib gawk gcc-multilib genisoimage gettext git gperf \
+            haveged help2man intltool jq libbpf-dev libc6-dev-i386 libclang-dev libelf-dev \
+            libfuse-dev libglib2.0-dev libgmp3-dev libltdl-dev libmpc-dev libmpfr-dev \
+            libncurses5-dev libncursesw5-dev libpython3-dev libreadline-dev libssl-dev \
+            libtool llvm lrzsz mkisofs msmtp ninja-build p7zip p7zip-full patch pkgconf \
+            python2.7 python3 python3-distutils python3-pyelftools python3-setuptools \
+            qemu-utils rsync scons squashfs-tools subversion swig texinfo uglifyjs \
+            upx-ucl unzip vim wget xmlto xxd zlib1g-dev zstd
+          sudo -E apt-get -yqq autoremove --purge
+          sudo -E apt-get -yqq clean
+          sudo timedatectl set-timezone "$TZ"
+
+          sudo mkdir -p "$BUILD_ROOT"
+          sudo chown "$USER":"$USER" "$BUILD_ROOT"
+
+          echo "磁盘:"; df -hT /
+          echo "内存:"; free -h
+
+      # ---------------------------------------------------------------
+      # 拉源码（浅克隆：只要当前树，历史没用到）
+      # ---------------------------------------------------------------
+      - name: Clone source code
+        run: |
+          cd "$BUILD_ROOT"
+          git clone --depth=1 --single-branch -b "$BRANCH" "$REPO_URL" openwrt
+          ln -sfn "$BUILD_ROOT/openwrt" "$GITHUB_WORKSPACE/openwrt"
+          cd openwrt
+          echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+          echo "上游提交: $(git rev-parse HEAD)"
+          ls -d staging_dir 2>/dev/null || echo "staging_dir 尚未生成（正常）"
+
+      - name: Make scripts executable
+        run: |
+          find "$GITHUB_WORKSPACE/scripts" -type f -name '*.sh' -exec dos2unix {} \; -exec chmod +x {} \;
+
+      # ---------------------------------------------------------------
+      # 缓存 key（恢复之前算完，配置怎么改都不影响 key）
+      # ---------------------------------------------------------------
+      - name: Compute cache key
+        id: cache-key
+        env:
+          SOURCE_SLUG: ${{ steps.resolve.outputs.source_slug }}
+          BRANCH_SLUG: ${{ steps.resolve.outputs.branch_slug }}
+        run: bash "$GITHUB_WORKSPACE/scripts/ci/cache.sh" key "$BUILD_ROOT/openwrt"
+
+      # ---------------------------------------------------------------
+      # 恢复工具链缓存
+      #   restore-keys 用前缀回退：提交号变了也能拿到上一代，
+      #   这是「缓存几乎总能命中」的来源。
+      # ---------------------------------------------------------------
+      - name: Restore toolchain cache
+        id: tc-restore
+        if: steps.resolve.outputs.cache == 'enable'
+        uses: actions/cache/restore@v6
+        with:
+          key: ${{ steps.cache-key.outputs.tc_key }}
+          restore-keys: ${{ steps.cache-key.outputs.prefix }}-tc-
+          path: |
+            /workdir/openwrt/staging_dir/host*
+            /workdir/openwrt/staging_dir/tool*
+
+      - name: Prepare restored cache
+        id: tc-prepare
+        if: steps.resolve.outputs.cache == 'enable' && steps.tc-restore.outputs.cache-matched-key != ''
+        run: bash "$GITHUB_WORKSPACE/scripts/ci/cache.sh" prepare "$BUILD_ROOT/openwrt"
+
+      # ---------------------------------------------------------------
+      # feeds + 自定义钩子
+      # ---------------------------------------------------------------
+      - name: diy-part1 (before feeds)
+        run: |
+          cd "$BUILD_ROOT/openwrt"
+          bash "$GITHUB_WORKSPACE/scripts/ci/diy-part1.sh"
+
+      - name: Update & install feeds
+        run: |
+          cd "$BUILD_ROOT/openwrt"
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+
+      # ---------------------------------------------------------------
+      # 生成 .config：基础配置 + 机型 + 额外插件
+      # ---------------------------------------------------------------
+      - name: Generate .config
+        run: |
+          cd "$BUILD_ROOT/openwrt"
+          bash "$GITHUB_WORKSPACE/scripts/ci/gen-config.sh" \
+            "$BUILD_ROOT/openwrt" \
+            "$GITHUB_WORKSPACE/$CONFIG_BASE" \
+            "$DEVICE" \
+            "$EXTRA_PLUGINS"
+
+      - name: diy-part2 (before defconfig)
+        run: |
+          cd "$BUILD_ROOT/openwrt"
+          bash "$GITHUB_WORKSPACE/scripts/ci/diy-part2.sh"
+
+      # 唯一一次 defconfig：之后不再调用，避免写死的配置被重新展开剔除
+      - name: Defconfig & verify
+        run: |
+          cd "$BUILD_ROOT/openwrt"
+          # 不能 `make defconfig | tail`：退出码取的是 tail 的，失败会被吞掉
+          make defconfig
+          bash "$GITHUB_WORKSPACE/scripts/ci/verify-config.sh" \
+            "$BUILD_ROOT/openwrt" "$DEVICE" "$EXTRA_PLUGINS"
+
+      # ---------------------------------------------------------------
+      # 工具链：缓存没给出（或缓存里工具链坏了）才编
+      # ---------------------------------------------------------------
+      - name: Build tools & toolchain
+        id: toolchain
+        if: >-
+          steps.tc-restore.outputs.cache-hit != 'true'
+          || steps.tc-prepare.outputs.toolchain_ok != 'true'
+        run: |
+          cd "$BUILD_ROOT/openwrt"
+          make tools/install -j"$(nproc)" || make tools/install -j1 V=s || {
+            echo "::error::tools 编译失败"; exit 1; }
+          make toolchain/install -j"$(nproc)" || make toolchain/install -j1 V=s || {
+            echo "::error::toolchain 编译失败"; exit 1; }
+
+          # 让后续 make 认账：tmp/.build 存在即视为环境已初始化。
+          # ⚠ 不要造 tools/stamp-compile 这类同名文件 —— 那是 make 变量不是文件，
+          #   造出来会被 timestamp.pl 判定「源码变了」，每轮白重编。
+          mkdir -p tmp && echo 1 > tmp/.build
+
+      # 工具链一编完就存一次：后面最长两小时，超时被 cancel 就白编了。
+      # ⚠ key 必须带 -early：一个 key 只能存一次，同 key 会把完整版挡在门外。
+      - name: Freeze build_dir stamps (before early save)
+        if: >-
+          (!cancelled())
+          && steps.resolve.outputs.cache == 'enable'
+          && steps.toolchain.outcome == 'success'
+          && steps.tc-restore.outputs.cache-hit != 'true'
+        continue-on-error: true
+        run: bash "$GITHUB_WORKSPACE/scripts/ci/cache.sh" freeze "$BUILD_ROOT/openwrt"
+
+      - name: Save toolchain cache (early)
+        if: >-
+          (!cancelled())
+          && steps.resolve.outputs.cache == 'enable'
+          && steps.toolchain.outcome == 'success'
+          && steps.tc-restore.outputs.cache-hit != 'true'
+        continue-on-error: true
+        uses: actions/cache/save@v6
+        with:
+          key: ${{ steps.cache-key.outputs.tc_key }}-early
+          path: |
+            /workdir/openwrt/staging_dir/host*
+            /workdir/openwrt/staging_dir/tool*
+
+      # ---------------------------------------------------------------
+      # dl 下载缓存（按周复用）
+      # ---------------------------------------------------------------
+      - name: Restore dl cache
+        id: dl-restore
+        if: steps.resolve.outputs.cache == 'enable' && steps.resolve.outputs.scope == 'firmware'
+        uses: actions/cache/restore@v6
+        continue-on-error: true
+        with:
+          key: ${{ steps.cache-key.outputs.dl_key }}
+          restore-keys: ${{ steps.cache-key.outputs.prefix }}-dl-
+          path: /workdir/openwrt/dl
+
+      - name: Download packages
+        id: download
+        if: steps.resolve.outputs.scope == 'firmware'
+        run: |
+          cd "$BUILD_ROOT/openwrt"
+          OK=0
+          for i in 1 2 3; do
+            echo "===== 第 ${i} 次 make download ====="
+            if make download -j8; then OK=1; break; fi
+            echo "::warning::第 ${i} 次 make download 失败，5 秒后重试"
+            sleep 5
+          done
+
+          # 清掉下载失败留下的小文件，否则解压时报 "does not look like a tar archive"
+          find dl -size -1024c -type f -exec ls -l {} \; 2>/dev/null || true
+          find dl -size -1024c -type f -delete 2>/dev/null || true
+          echo "dl 共 $(ls -1 dl 2>/dev/null | wc -l) 个文件 / $(du -sh dl 2>/dev/null | cut -f1)"
+
+          if [ "$OK" -ne 1 ]; then
+            echo "::error::make download 连续 3 次失败 —— 先修下载，别往下编"
+            echo "::error::继续编译只会在几十分钟后给出更难懂的错（解压失败 / 缺 crate）"
+            exit 1
+          fi
+
+      # 存 dl 必须放在编译之前：跑到 350 分钟被 cancel 时，后面 always() 也来不及
+      - name: Save dl cache
+        if: >-
+          success()
+          && steps.resolve.outputs.cache == 'enable'
+          && steps.resolve.outputs.scope == 'firmware'
+          && steps.dl-restore.outputs.cache-hit != 'true'
+          && steps.download.outcome == 'success'
+        continue-on-error: true
+        uses: actions/cache/save@v6
+        with:
+          key: ${{ steps.cache-key.outputs.dl_key }}
+          path: /workdir/openwrt/dl
+
+      # ---------------------------------------------------------------
+      # 编译
+      # ---------------------------------------------------------------
+      - name: Compile firmware
+        id: compile
+        if: steps.resolve.outputs.scope == 'firmware'
+        timeout-minutes: 300
+        run: |
+          cd "$BUILD_ROOT/openwrt"
+
+          # 并发按可用内存算（每个 cc1 约 1.5~2G），-j4 在 16G 上也可能 OOM
+          JOBS=$(awk -v p="$(nproc)" '/^MemAvailable:/{m=int($2/2097152)+1} END{print m<p?m:p}' /proc/meminfo)
+          JOBS=$(( JOBS < 1 ? 1 : JOBS ))
+          echo "开始编译：${JOBS} 线程 / 机型 ${DEVICE}"
+
+          LOGDIR="$GITHUB_WORKSPACE/build-logs"
+          mkdir -p "$LOGDIR"
+          : > "$LOGDIR/build.log"
+
+          set -o pipefail
+          try_build() {
+            local tag="$1"; shift
+            echo "::group::make $* [$tag]"
+            make "$@" 2>&1 | tee -a "$LOGDIR/build.log"
+            local rc=${PIPESTATUS[0]}
+            echo "::endgroup::"
+            echo "[$tag] rc=${rc}"
+            return "$rc"
+          }
+
+          OK=0
+          if try_build "j${JOBS}" -j"${JOBS}"; then
+            OK=1
+          else
+            # subdir.mk 会把子目录失败折叠成一行 `ERROR: <子目录> failed to build`。
+            # 全树 -j1 重试对确定性错误没意义，直接从这行取出子目录单独重跑。
+            FAILED_SUB=$(grep -oE 'ERROR: [^ ]+ failed to build' "$LOGDIR/build.log" \
+              | tail -1 | sed 's/^ERROR: //; s/ failed to build$//' || true)
+            case "$FAILED_SUB" in
+              target/linux) VERBOSE="$FAILED_SUB/install" ;;
+              package/*)    VERBOSE="$FAILED_SUB/compile" ;;
+              *)            VERBOSE="" ;;
+            esac
+
+            if [ -n "$VERBOSE" ]; then
+              echo "::group::单独重跑 $VERBOSE（V=s，取真错误）"
+              make -j1 V=s "$VERBOSE" >> "$LOGDIR/build.log" 2>&1 || true
+              tail -60 "$LOGDIR/build.log" || true
+              echo "::endgroup::"
+            elif try_build "j1" -j1; then
+              OK=1
+            elif try_build "verbose" -j1 V=s; then
+              OK=1
+            fi
+          fi
+
+          if [ "$OK" -ne 1 ]; then
+            cp -f "$LOGDIR/build.log" "$LOGDIR/failure.log" 2>/dev/null || true
+            echo "::group::失败定位"
+            grep -nE '(^|[[:space:]])(ERROR:|error:|\*\*\* .*Error [0-9]+)|unable to select packages|no such package|Image too big' \
+              "$LOGDIR/build.log" | tail -30 || echo "(没匹配到 ERROR 行，看下面末尾)"
+            echo "---- 最后 40 行 ----"
+            tail -40 "$LOGDIR/build.log" || true
+            echo "::endgroup::"
+            # 注解直接显示在 run 页面首屏，不用下载 artifact
+            ERRS=$(grep -nE '(^|[[:space:]])(ERROR:|error:)' "$LOGDIR/build.log" | tail -4 | tr -d '\r' || true)
+            if [ -n "$ERRS" ]; then
+              while IFS= read -r l; do
+                [ -n "$l" ] || continue
+                echo "::error::$(printf '%s' "$l" | sed 's/%/%25/g' | cut -c1-300)"
+              done <<< "$ERRS"
+            fi
+            exit 1
+          fi
+
+          df -hT /
+          echo "status=success" >> "$GITHUB_OUTPUT"
+
+      # ---------------------------------------------------------------
+      # 编译后再冻一次戳 + 存完整缓存
+      # 编译阶段顺带编出的 host 包（python3、golang 等）只有这时才有戳
+      # ---------------------------------------------------------------
+      - name: Freeze build_dir stamps (after compile)
+        if: (!cancelled()) && steps.resolve.outputs.cache == 'enable'
+        continue-on-error: true
+        run: bash "$GITHUB_WORKSPACE/scripts/ci/cache.sh" freeze "$BUILD_ROOT/openwrt"
+
+      - name: Save toolchain cache
+        if: >-
+          (!cancelled())
+          && steps.resolve.outputs.cache == 'enable'
+          && steps.tc-restore.outputs.cache-hit != 'true'
+        continue-on-error: true
+        uses: actions/cache/save@v6
+        with:
+          key: ${{ steps.cache-key.outputs.tc_key }}
+          path: |
+            /workdir/openwrt/staging_dir/host*
+            /workdir/openwrt/staging_dir/tool*
+
+      - name: Cache report
+        if: always()
+        continue-on-error: true
+        run: |
+          bash "$GITHUB_WORKSPACE/scripts/ci/cache.sh" status "$BUILD_ROOT/openwrt" || true
+          {
+            echo ""
+            echo "### 缓存"
+            echo ""
+            echo "- key：\`${{ steps.cache-key.outputs.tc_key }}\`"
+            echo "- 精确命中：\`${{ steps.tc-restore.outputs.cache-hit }}\`"
+            echo "- 恢复自：\`${{ steps.tc-restore.outputs.cache-matched-key }}\`"
+            echo "- dl key：\`${{ steps.cache-key.outputs.dl_key }}\`（命中 \`${{ steps.dl-restore.outputs.cache-hit }}\`）"
+            echo "- 工具链：$([ "${{ steps.toolchain.outcome }}" = "skipped" ] && echo '缓存已给出，未重编' || echo "本轮编译（${{ steps.toolchain.outcome }}）")"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # ---------------------------------------------------------------
+      # 产物
+      # ---------------------------------------------------------------
+      - name: Collect firmware
+        id: collect
+        if: steps.resolve.outputs.scope == 'firmware' && steps.compile.outcome == 'success'
+        run: |
+          cd "$BUILD_ROOT/openwrt"
+          TARGET_DIR="bin/targets/mediatek/filogic"
+          [ -d "$TARGET_DIR" ] || { echo "::error::看不到产物目录 $TARGET_DIR"; exit 1; }
+
+          # packages / kmods 是内核模块的 apk 集合，动辄 1GB，固件用不到
+          rm -rf "$TARGET_DIR/packages" "$TARGET_DIR/kmods"
+
+          OUT="$GITHUB_WORKSPACE/firmware"
+          mkdir -p "$OUT"
+          find "$TARGET_DIR" -maxdepth 1 -type f \
+            \( -name '*.bin' -o -name '*.itb' -o -name '*.fip' -o -name '*.manifest' \
+               -o -name 'profiles.json' -o -name '*.sha256sums' -o -name 'config.buildinfo' \) \
+            -exec cp -f {} "$OUT/" \;
+
+          {
+            echo "源码      : ${SOURCE} (${REPO_URL})"
+            echo "分支      : ${BRANCH}"
+            echo "提交      : $(git rev-parse HEAD)"
+            echo "机型      : ${DEVICE}"
+            echo "额外插件  : ${EXTRA_PLUGINS}"
+            echo "构建时间  : $(TZ=Asia/Shanghai date '+%Y-%m-%d %H:%M:%S')"
+            echo "内核      : $(grep -m1 '^CONFIG_LINUX_' .config | sed 's/^CONFIG_LINUX_//; s/=y$//; s/_/./g')"
+          } > "$OUT/build-info.txt"
+
+          echo "FIRMWARE_DIR=$OUT" >> "$GITHUB_ENV"
+          echo "status=success" >> "$GITHUB_OUTPUT"
+          echo "----- 产物 -----"
+          ls -lh "$OUT"
+
+      - name: Upload artifact
+        if: steps.collect.outputs.status == 'success' && !cancelled()
+        uses: actions/upload-artifact@v6
+        with:
+          name: firmware-${{ steps.resolve.outputs.device_name }}-${{ env.FILE_DATE }}
+          path: ${{ env.FIRMWARE_DIR }}
+          if-no-files-found: error
+
+      - name: Upload build log
+        if: failure()
+        continue-on-error: true
+        uses: actions/upload-artifact@v6
+        with:
+          name: build-log-${{ steps.resolve.outputs.device_name }}-${{ github.run_id }}
+          path: build-logs/
+          if-no-files-found: warn
+
+      - name: Publish release
+        if: >-
+          steps.collect.outputs.status == 'success'
+          && steps.resolve.outputs.release == 'true'
+          && !cancelled()
+        uses: softprops/action-gh-release@master
+        env:
+          GITHUB_TOKEN: ${{ secrets.TOKEN || secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ steps.resolve.outputs.tag }}
+          name: ${{ steps.resolve.outputs.device_name }} ${{ env.FILE_DATE }}
+          body_path: ${{ env.FIRMWARE_DIR }}/build-info.txt
+          files: ${{ env.FIRMWARE_DIR }}/*
+          fail_on_unmatched_files: false
+
+  # ===============================================================
+  # 缓存轮换：每个前缀只留当前这一代
+  #   actions/cache 每仓库上限 10GB，提交号一变就产生新条目，
+  #   旧的不删，两三个提交后就把配额吃满，后续再也存不进去。
+  # ===============================================================
+  cache-rollover:
+    needs: build
+    if: needs.build.outputs.cache == 'enable' && needs.build.result == 'success'
+    runs-on: ubuntu-22.04
+    concurrency:
+      group: cache-rollover-${{ needs.build.outputs.prefix }}
+      cancel-in-progress: false
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Roll cache generations
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          PREFIX: ${{ needs.build.outputs.prefix }}
+          TC_KEY: ${{ needs.build.outputs.tc_key }}
+          DL_KEY: ${{ needs.build.outputs.dl_key }}
+        run: bash scripts/ci/cache.sh rollover
