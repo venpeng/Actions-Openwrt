@@ -32,6 +32,11 @@
 | `upload_release` | `true` / `false` | `false` 只上传 Artifact，不发 Release |
 
 产物：Artifact `firmware-<源码>-<机型>-<日期>`，同时发布到 Release（tag `<源码>-<机型>-<时间>`）。
+包里除固件外还带三样东西：
+
+- `config-<源码>-<机型>-<日期>.config` —— **展开后的 .config**，即 `make defconfig` 之后真正驱动本次编译的那份（和 `config.buildinfo` 内容相同，只是名字能认出是哪台机器编的）
+- `build-info.txt` —— 源码 / 分支 / 提交号 / 机型 / 内核版本
+- `*.manifest` —— 包清单，排查「某个插件为什么没进去」用
 
 > 首次运行建议：先跑一次 `scope=toolchain-only` 把工具链缓存建起来（约 25 分钟），
 > 之后再跑 `firmware` 就只编 target 侧，省掉重复的工具链编译。两个分支各有一份缓存，
