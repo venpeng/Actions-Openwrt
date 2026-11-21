@@ -7,21 +7,24 @@
 | 锐捷 X60 | `ruijie_rg-x60-new-expand` | 你现用的扩容分区布局 |
 | 锐捷 X60 Pro | `ruijie_rg-x60-pro-107m` | 107M 分区布局 |
 
-源码用两份（同一套 mt7986 6.6 内核，驱动/固件版本不同）：
+源码用两份（同一套 mt7986 6.6 内核，驱动/固件版本不同），**各占一个 git 分支**：
 
-| 选项 | 仓库 | 特点 |
+| git 分支 | 源码仓库 | 特点 |
 | --- | --- | --- |
 | `padavanonly` | `padavanonly/immortalwrt-mt798x-6.6` | 上游原版，MTK 厂商 WiFi 驱动 |
 | `yuzhii0718` | `Yuzhii0718/immortalwrt-mt798x-6.6-padavanonly` | 二开版本，多一个 `rg-x60-new-ubi` 机型，厂商 WiFi 固件更新 |
 
+两个分支的文件**完全一致**，只有运行时读到的 `github.ref_name` 不同 —— 所以不存在两份配置漂移的问题。
+
 ## 怎么用
 
-`Actions` → `Build ImmortalWrt MT7986` → `Run workflow`，七个下拉：
+`Actions` → `Build ImmortalWrt MT7986` → 右上角 **`Use workflow from`** 选分支（= 选源码）→ `Run workflow`。
+
+选 `padavanonly` 分支就是 padavanonly 源码，选 `yuzhii0718` 分支就是二开源码。表单里只剩六个输入：
 
 | 输入 | 取值 | 说明 |
 | --- | --- | --- |
-| `source` | `padavanonly` / `yuzhii0718` | 选源码仓库 |
-| `branch` | 默认 `openwrt-24.10-6.6` | 自由填写，不存在会在第一步就报错并列出可用分支 |
+| `branch` | 默认 `openwrt-24.10-6.6` | **上游**源码分支，不是本仓库分支；填错会在第一步报错并列出可用分支 |
 | `device` | 2 个机型 / `all` | `all` = `config/devices.txt` 里列出的机型一起编（当前就是这两台） |
 | `extra_plugins` | `true` / `false` | 额外插件开关，清单在 `config/extra-packages.config` |
 | `scope` | `firmware` / `toolchain-only` | `toolchain-only` 只编工具链并写缓存，用于首次预热 |
@@ -31,13 +34,25 @@
 产物：Artifact `firmware-<源码>-<机型>-<日期>`，同时发布到 Release（tag `<源码>-<机型>-<时间>`）。
 
 > 首次运行建议：先跑一次 `scope=toolchain-only` 把工具链缓存建起来（约 25 分钟），
-> 之后再跑 `firmware` 就只编 target 侧，省掉重复的工具链编译。
+> 之后再跑 `firmware` 就只编 target 侧，省掉重复的工具链编译。两个分支各有一份缓存，
+> key 前缀分别是 `mt7986-padavanonly-…` 和 `mt7986-yuzhii0718-…`，互不干扰。
+
+### 改了 workflow 怎么同步到另一个分支
+
+两个分支内容一样，改完一个直接推过去即可：
+
+```bash
+git checkout padavanonly
+# ...改文件...
+git commit -am "ci: xxx" && git push origin padavanonly
+git push origin padavanonly:yuzhii0718    # 一条命令同步另一个分支
+```
 
 ## 目录结构
 
 ```
 .github/workflows/
-  openwrt-builder.yml     统一主流程（源码/分支/机型/插件/缓存）
+  openwrt-builder.yml     统一主流程（源码由分支决定 / 机型 / 插件 / 缓存）
   cache-clean.yml         手动清缓存（默认 dry_run，先看再删）
 config/
   base/padavanonly.config      基础 .config（不含机型符号、不含额外插件）
@@ -133,6 +148,10 @@ ttyd / upnp / wechatpush / wol，以及它们的直接依赖。
 旧的四个手动 workflow（`openwrt-builder-x60.yml` / `-x60-new` / `-x60-pro` / `-x60-pro-new`）
 已合并到 `openwrt-builder.yml`，原文件仍在 git 历史里可查。
 原来的 `config/x60/.config`、`config/x60-pro/.config` 已清洗成 `config/base/*.config`。
+
+`master` 分支是拆分前的版本（带 `source` 下拉、可切两份源码）。现在按源码拆成
+`padavanonly` / `yuzhii0718` 两个分支，源码由运行时所在分支决定；切完默认分支后
+`master` 可以删掉，也可以留着当双源码的备用入口（它的 workflow 仍是旧版，能正常跑）。
 
 ## License
 

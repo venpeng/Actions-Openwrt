@@ -1,11 +1,17 @@
 # =============================================================
 # Build ImmortalWrt MT7986 —— 锐捷 X60 / X60 Pro 统一编译流水线
 #
-# 一次下拉解决四件事：
-#   1. 源码仓库（padavanonly 原版 / Yuzhii0718 二次开发）与分支
+# 源码由「本仓库的 git 分支」决定，不是下拉框：
+#   分支 padavanonly → padavanonly/immortalwrt-mt798x-6.6
+#   分支 yuzhii0718  → Yuzhii0718/immortalwrt-mt798x-6.6-padavanonly
+#   在 Actions 页面右上角的 "Use workflow from" 选分支，就等于选源码。
+#   两个分支的文件完全一致，改完一个用 git push origin A:B 同步另一个。
+#
+# 下拉还剩四件事：
+#   1. 上游源码分支（openwrt-24.10-6.6 等）
 #   2. 机型（X60 / X60 Pro，或 all = config/devices.txt 里列出的全部机型）
 #   3. 是否编译额外插件（清单：config/extra-packages.config）
-#   4. 工具链 + dl 下载缓存（参考 Actions-OpenWrt-AN758X / OpenWRT-CI）
+#   4. 构建范围 / 缓存开关 / 是否发 Release
 #
 # 配置结构：
 #   config/base/<源码>.config        基础配置（不含机型符号、不含额外插件）
@@ -22,16 +28,8 @@ on:
   repository_dispatch:
   workflow_dispatch:
     inputs:
-      source:
-        description: '源码仓库：padavanonly，yuzhii0718'
-        required: true
-        default: padavanonly
-        type: choice
-        options:
-          - padavanonly
-          - yuzhii0718
       branch:
-        description: '源码分支。默认 openwrt-24.10-6.6'
+        description: '上游源码分支（不是本仓库分支）。默认 openwrt-24.10-6.6'
         required: true
         default: openwrt-24.10-6.6
         type: string
@@ -104,12 +102,17 @@ jobs:
           persist-credentials: false
 
       # ---------------------------------------------------------------
-      # 输入解析：把下拉项翻译成地址、配置路径、命名
+      # 输入解析
+      #   源码不由下拉决定，而是看「从哪个 git 分支运行」：
+      #     分支 padavanonly → padavanonly 原版
+      #     分支 yuzhii0718  → Yuzhii0718 二次开发
+      #   两个分支的文件完全一致，只有运行时读到 ref_name 不同。
       # ---------------------------------------------------------------
       - name: Resolve inputs
         id: resolve
+        env:
+          REF_NAME: ${{ github.ref_name }}
         run: |
-          SOURCE="${{ inputs.source || 'padavanonly' }}"
           BRANCH="${{ inputs.branch || 'openwrt-24.10-6.6' }}"
           DEVICE="${{ inputs.device || 'ruijie_rg-x60-new-expand' }}"
           EXTRA="${{ inputs.extra_plugins || 'true' }}"
@@ -117,14 +120,21 @@ jobs:
           CACHE="${{ inputs.cache || 'enable' }}"
           RELEASE="${{ inputs.upload_release || 'true' }}"
 
-          case "$SOURCE" in
+          case "$REF_NAME" in
             padavanonly)
+              SOURCE="padavanonly"
               REPO_URL="https://github.com/padavanonly/immortalwrt-mt798x-6.6.git" ;;
             yuzhii0718)
+              SOURCE="yuzhii0718"
               REPO_URL="https://github.com/Yuzhii0718/immortalwrt-mt798x-6.6-padavanonly.git" ;;
             *)
-              echo "::error::未知源码 '$SOURCE'，只支持 padavanonly / yuzhii0718"; exit 1 ;;
+              echo "::error::当前分支是 '${REF_NAME}'，判断不出用哪份源码"
+              echo "::error::请从 padavanonly 或 yuzhii0718 分支运行："
+              echo "::error::  Actions 页面右上角 'Use workflow from' 选分支 → Run workflow"
+              echo "::error::如果这是 master/main：它已经被拆成两个分支，改默认分支后再删即可"
+              exit 1 ;;
           esac
+          echo "源码: ${SOURCE}（由分支 ${REF_NAME} 决定）"
 
           # 分支先验证再 clone，省得跑到一半才发现写错
           if ! git ls-remote --exit-code --heads "$REPO_URL" "$BRANCH" >/dev/null 2>&1; then
@@ -177,7 +187,7 @@ jobs:
             echo ""
             echo "| 项 | 值 |"
             echo "| --- | --- |"
-            echo "| 源码 | \`${SOURCE}\` |"
+            echo "| 源码 | \`${SOURCE}\`（由分支 \`${REF_NAME}\` 决定） |"
             echo "| 仓库 | ${REPO_URL} |"
             echo "| 分支 | \`${BRANCH}\` |"
             echo "| 机型 | \`${DEVICE}\` |"
