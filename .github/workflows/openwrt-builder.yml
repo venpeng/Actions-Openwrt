@@ -23,7 +23,7 @@ on:
   workflow_dispatch:
     inputs:
       source:
-        description: '源码仓库：padavanonly = 上游原版；yuzhii0718 = 二次开发（多 rg-x60-new-ubi）'
+        description: '源码仓库：padavanonly，yuzhii0718'
         required: true
         default: padavanonly
         type: choice
@@ -31,12 +31,12 @@ on:
           - padavanonly
           - yuzhii0718
       branch:
-        description: '源码分支。默认 openwrt-24.10-6.6（两个仓库都有）；padavanonly 另有 mt7988-6.6-mt76 / mt798x-mt799x-6.6-mtwifi / 2410，yuzhii0718 另有 dev-an8811 / mtk-switch'
+        description: '源码分支。默认 openwrt-24.10-6.6'
         required: true
         default: openwrt-24.10-6.6
         type: string
       device:
-        description: '机型：X60 → ruijie_rg-x60-new-expand，X60 Pro → ruijie_rg-x60-pro-107m；all = config/devices.txt 里列出的全部机型'
+        description: '机型：X60，X60-Pro，all'
         required: true
         default: ruijie_rg-x60-new-expand
         type: choice
@@ -45,7 +45,7 @@ on:
           - ruijie_rg-x60-pro-107m
           - all
       extra_plugins:
-        description: '编译额外插件（清单见 config/extra-packages.config）'
+        description: '编译额外插件'
         required: true
         default: 'true'
         type: choice
@@ -53,7 +53,7 @@ on:
           - 'true'
           - 'false'
       scope:
-        description: '构建范围：firmware = 完整固件；toolchain-only = 只编工具链并写缓存（预热用）'
+        description: '构建范围：firmware = 完整固件；toolchain-only = 只编工具链并写缓存'
         required: true
         default: firmware
         type: choice
