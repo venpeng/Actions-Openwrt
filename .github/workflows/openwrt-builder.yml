@@ -550,6 +550,13 @@ jobs:
                -o -name 'profiles.json' -o -name '*.sha256sums' -o -name 'config.buildinfo' \) \
             -exec cp -f {} "$OUT/" \;
 
+          # 展开后的 .config：defconfig 之后、真正驱动本次编译的那份。
+          # 单独改名存一份 —— bin/targets 里的 config.buildinfo 也是它，
+          # 但那个名字在打包目录里认不出是哪台机器、哪份源码编的。
+          CFG_NAME="config-${SOURCE}-${DEVICE}-${FILE_DATE}.config"
+          cp -f .config "$OUT/$CFG_NAME"
+          echo "已附带配置: $CFG_NAME（$(wc -l < "$OUT/$CFG_NAME") 行）"
+
           {
             echo "源码      : ${SOURCE} (${REPO_URL})"
             echo "分支      : ${BRANCH}"
@@ -558,6 +565,7 @@ jobs:
             echo "额外插件  : ${EXTRA_PLUGINS}"
             echo "构建时间  : $(TZ=Asia/Shanghai date '+%Y-%m-%d %H:%M:%S')"
             echo "内核      : $(grep -m1 '^CONFIG_LINUX_' .config | sed 's/^CONFIG_LINUX_//; s/=y$//; s/_/./g')"
+            echo "配置文件  : ${CFG_NAME}（= 本次实际使用的 .config）"
           } > "$OUT/build-info.txt"
 
           echo "FIRMWARE_DIR=$OUT" >> "$GITHUB_ENV"
