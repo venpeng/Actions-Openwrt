@@ -1,33 +1,75 @@
+# =============================================================
+# Build ImmortalWrt ACRH17
 #
-# https://github.com/P3TERX/Actions-OpenWrt
+# 本分支只编 ACRH17（asus_rt-ac42u，ipq40xx/generic）一台机器。
+# 原来 main 上是两个 workflow，差别只有 LAN 网段（1.1 / 11.1），
+# 现在合并成一个，网段放下拉框选。
 #
-# File: .github/workflows/openwrt-bulder.yml
-# Description: Build OpenWrt using GitHub Actions
+# 下拉：
+#   lan_ip          1.1  = 192.168.1.1（固件默认，等同于不改）
+#                   11.1 = 192.168.11.1
+#   extra_plugins   true = config/extra-packages.config 里的插件全部编进去
+#                   false = 那些插件全部置为 not set
+#   upload_release  是否发 Release
 #
-# Copyright (c) 2019-2024 P3TERX <https://p3terx.com>
+# 配置结构（.config 不再是一份死文件，而是每次现拼）：
+#   config/base/immortalwrt-24.10.config   基础配置（不含机型符号、不含额外插件）
+#   config/extra-packages.config           额外插件清单
+#   scripts/ci/gen-config.sh               基础配置 + 机型 + 插件 → openwrt/.config
+#   scripts/ci/verify-config.sh            defconfig 后校验机型/插件是否真的生效
+#   diysh/acrh17/diy-part1.sh              feeds 更新前
+#   diysh/acrh17/diy-part2.sh              feeds 更新后，按 LAN_IP 改网关与 ssid
 #
-# This is free software, licensed under the MIT License.
-# See /LICENSE for more information.
-#
+# 注意：基础配置里 CONFIG_TARGET_PREINIT_IP 仍是 192.168.1.1，
+#       那是镜像预初始化阶段的地址，只在首启未配置时短暂生效，
+#       选 11.1 也不影响正常使用，所以不动它。
+# =============================================================
 
-name: OpenWrt Builder For ACRH17 1.1
+name: Build ImmortalWrt ACRH17
 
 on:
   repository_dispatch:
   workflow_dispatch:
+    inputs:
+      lan_ip:
+        description: 'LAN 网段：1.1 = 192.168.1.1（固件默认），11.1 = 192.168.11.1'
+        required: true
+        default: '1.1'
+        type: choice
+        options:
+          - '1.1'
+          - '11.1'
+      extra_plugins:
+        description: '编译额外插件（清单：config/extra-packages.config）'
+        required: true
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+      upload_release:
+        description: '固件发布到 Release（false 则只上传 Artifact）'
+        required: true
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
 
 env:
   REPO_URL: https://github.com/immortalwrt/immortalwrt
   REPO_BRANCH: openwrt-24.10
   FEEDS_CONF: feeds.conf.default
-  CONFIG_FILE: config/acrh17/.config
+  CONFIG_BASE: config/base/immortalwrt-24.10.config
   DIY_P1_SH: diysh/acrh17/diy-part1.sh
-  DIY_P2_SH: diysh/acrh17/1.1/diy-part2.sh
+  DIY_P2_SH: diysh/acrh17/diy-part2.sh
   UPLOAD_BIN_DIR: false
   UPLOAD_FIRMWARE: true
-  UPLOAD_RELEASE: true
+  EXTRA_PLUGINS: ${{ inputs.extra_plugins || 'true' }}
+  UPLOAD_RELEASE: ${{ inputs.upload_release || 'true' }}
   TZ: Asia/Shanghai
-  LAN_IP: 1.1
+  # 由下拉框决定；repository_dispatch 触发时没有 inputs，退回 1.1
+  LAN_IP: ${{ inputs.lan_ip || '1.1' }}
 
 jobs:
   build:
@@ -71,19 +113,37 @@ jobs:
       - name: Install feeds
         run: cd openwrt && ./scripts/feeds install -a
 
+      # ---------------------------------------------------------------
+      # 生成 .config：基础配置 + 机型符号 + 额外插件开关
+      # ---------------------------------------------------------------
+      - name: Generate .config
+        run: |
+          cd openwrt
+          bash "$GITHUB_WORKSPACE/scripts/ci/gen-config.sh" \
+            "$PWD" \
+            "$GITHUB_WORKSPACE/$CONFIG_BASE" \
+            "$EXTRA_PLUGINS"
+
       - name: Load custom configuration
         run: |
           [ -e files ] && mv files openwrt/files
-          [ -e $CONFIG_FILE ] && mv $CONFIG_FILE openwrt/.config
           chmod +x $DIY_P2_SH
           cd openwrt
-          $GITHUB_WORKSPACE/$DIY_P2_SH
+          # LAN_IP 由 workflow env 传入，脚本里读它改网关
+          LAN_IP="$LAN_IP" $GITHUB_WORKSPACE/$DIY_P2_SH
+
+      # 唯一一次 defconfig：之后不再调用，避免写死的配置被重新展开剔除
+      - name: Defconfig & verify
+        run: |
+          cd openwrt
+          # 不能 `make defconfig | tail`：退出码取的是 tail 的，失败会被吞掉
+          make defconfig
+          bash "$GITHUB_WORKSPACE/scripts/ci/verify-config.sh" "$PWD" "$EXTRA_PLUGINS"
 
       - name: Download package
         id: package
         run: |
           cd openwrt
-          make defconfig
           make download -j8
           find dl -size -1024c -exec ls -l {} \;
           find dl -size -1024c -exec rm -f {} \;
@@ -132,7 +192,6 @@ jobs:
         run: |
           echo "release_tag=$(date +"%Y.%m.%d_%H%M")${{ env.DEVICE_NAME }}_${{ env.LAN_IP }}" >> $GITHUB_OUTPUT
           touch release.txt
-          [ ${UPLOAD_GOFILE} = true && ${{ steps.gofile.outputs.url }} ] && echo "🔗 [GoFile](${{ steps.gofile.outputs.url }})" >> release.txt
           echo "status=success" >> $GITHUB_OUTPUT
 
       - name: Upload firmware to release

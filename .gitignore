@@ -7,3 +7,6 @@
 *.iml
 out
 gen
+
+# 本项目的 agent 工作目录（记忆/配置），不入库
+.workbuddy/

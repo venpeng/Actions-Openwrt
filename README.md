@@ -1,39 +1,95 @@
-**English** | [中文](https://p3terx.com/archives/build-openwrt-with-github-actions.html)
+# Actions-OpenWrt ACRH17
 
-# Actions-OpenWrt
+一条 GitHub Actions 流水线，编 ASUS ACRH17（OpenWrt 机型名 `asus_rt-ac42u`，`ipq40xx/generic`）。
 
-[![LICENSE](https://img.shields.io/github/license/mashape/apistatus.svg?style=flat-square&label=LICENSE)](https://github.com/P3TERX/Actions-OpenWrt/blob/master/LICENSE)
-![GitHub Stars](https://img.shields.io/github/stars/P3TERX/Actions-OpenWrt.svg?style=flat-square&label=Stars&logo=github)
-![GitHub Forks](https://img.shields.io/github/forks/P3TERX/Actions-OpenWrt.svg?style=flat-square&label=Forks&logo=github)
+源码：`immortalwrt/immortalwrt`，分支 `openwrt-24.10`。
 
-A template for building OpenWrt with GitHub Actions
+原来 `main` 上是两个 workflow，唯一差别是 LAN 网段（`192.168.1.1` 与 `192.168.11.1`），现在合并成一个，网段从下拉框选；插件也从配置里拆出来，用开关控制。
 
-## Usage
+## 怎么用
 
-- Click the [Use this template](https://github.com/P3TERX/Actions-OpenWrt/generate) button to create a new repository.
-- Generate `.config` files using [Lean's OpenWrt](https://github.com/coolsnowwolf/lede) source code. ( You can change it through environment variables in the workflow file. )
-- Push `.config` file to the GitHub repository.
-- Select `Build OpenWrt` on the Actions page.
-- Click the `Run workflow` button.
-- When the build is complete, click the `Artifacts` button in the upper right corner of the Actions page to download the binaries.
+`Actions` → `Build ImmortalWrt ACRH17` → `Run workflow`，三个输入：
 
-## Tips
+| 输入 | 取值 | 说明 |
+| --- | --- | --- |
+| `lan_ip` | `1.1`（默认） / `11.1` | 网关地址。`1.1` = `192.168.1.1`，即固件默认；`11.1` = `192.168.11.1` |
+| `extra_plugins` | `true`（默认） / `false` | 是否编译 `config/extra-packages.config` 里的插件 |
+| `upload_release` | `true` / `false` | `false` 只上传 Artifact，不发 Release |
 
-- It may take a long time to create a `.config` file and build the OpenWrt firmware. Thus, before create repository to build your own firmware, you may check out if others have already built it which meet your needs by simply [search `Actions-Openwrt` in GitHub](https://github.com/search?q=Actions-openwrt).
-- Add some meta info of your built firmware (such as firmware architecture and installed packages) to your repository introduction, this will save others' time.
+## 配置怎么组织
 
-## Credits
+`.config` 不再是一份死文件，每次构建现拼：
 
-- [Microsoft Azure](https://azure.microsoft.com)
-- [GitHub Actions](https://github.com/features/actions)
-- [OpenWrt](https://github.com/openwrt/openwrt)
-- [coolsnowwolf/lede](https://github.com/coolsnowwolf/lede)
-- [Mikubill/transfer](https://github.com/Mikubill/transfer)
-- [softprops/action-gh-release](https://github.com/softprops/action-gh-release)
-- [Mattraks/delete-workflow-runs](https://github.com/Mattraks/delete-workflow-runs)
-- [dev-drprasad/delete-older-releases](https://github.com/dev-drprasad/delete-older-releases)
-- [peter-evans/repository-dispatch](https://github.com/peter-evans/repository-dispatch)
+```
+config/base/immortalwrt-24.10.config   基础配置：除机型符号、除额外插件之外的完整配置
+config/extra-packages.config           额外插件清单（21 个符号）
+scripts/ci/gen-config.sh               基础配置 + 机型 + 插件 → openwrt/.config
+scripts/ci/verify-config.sh            defconfig 之后校验，30 秒内暴露静默丢包
+```
+
+`gen-config.sh` 干四件事：
+
+1. 拷基础配置
+2. 剔掉 `CONFIG_TARGET_*_DEVICE_*` / `CONFIG_TARGET_PROFILE` / `CONFIG_TARGET_MULTI_PROFILE` / `CONFIG_DEFAULT_*`
+3. 追加机型符号 `CONFIG_TARGET_ipq40xx_generic_DEVICE_asus_rt-ac42u=y`
+4. 按 `extra_plugins` 逐条写入插件：`true` 写 `=y`，`false` 写 `# CONFIG_x is not set`
+
+机型符号必须追加而不是留在文件里 —— 否则换机型要改配置文件；而且 defconfig 会静默丢弃源码树里不存在的设备符号、回落到子目标默认机型，编出来是别的机器的固件。所以 `verify-config.sh` 在 defconfig 后硬性检查这一点。
+
+## 改配置的两种姿势
+
+**加 / 减插件**：只改 `config/extra-packages.config`，一行一条：
+
+```
+CONFIG_PACKAGE_luci-app-ttyd=y
+CONFIG_PACKAGE_ttyd=y          # 依赖也写上，关闭开关时才会一起 not set
+```
+
+不用碰基础配置，也不用改 workflow。
+
+**改其它选项**（内核、包、文件系统…）：本地 `make menuconfig` 导出完整 `.config`，直接覆盖 `config/base/immortalwrt-24.10.config` 即可。脚本带兜底清理，即使里面混进了机型符号、`CONFIG_DEFAULT_*`、插件符号，也会被正确剔除/覆盖 —— 不用手工删。
+
+## 本地先验证再推送
+
+不用等 CI 跑几十分钟，本地造个假源码树就能验脚本逻辑：
+
+```bash
+mkdir -p /tmp/ow/target/linux/ipq40xx/image
+echo 'define Device/asus_rt-ac42u' > /tmp/ow/target/linux/ipq40xx/image/generic.mk
+
+bash scripts/ci/gen-config.sh /tmp/ow config/base/immortalwrt-24.10.config true
+grep -c '^CONFIG_PACKAGE_.*=y' /tmp/ow/.config      # 292（含 ttyd）
+bash scripts/ci/verify-config.sh /tmp/ow true
+```
+
+## 产物
+
+Artifact：`OpenWrt_firmware_<机型>_<日期时间>_<LAN_IP>`，同时发 Release（tag `<年.月.日_时分>_<机型>_<LAN_IP>`）。
+
+带 `_1.1` / `_11.1` 后缀是为了同一台机器两个网段的固件能分清，刷错包会连不上后台。
+
+## 目录
+
+```
+.github/workflows/openwrt-builder.yml   唯一流水线
+config/base/immortalwrt-24.10.config    基础配置
+config/extra-packages.config            额外插件清单
+scripts/ci/gen-config.sh                生成 .config
+scripts/ci/verify-config.sh             defconfig 后校验
+diysh/acrh17/diy-part1.sh               feeds 更新前（当前为空壳）
+diysh/acrh17/diy-part2.sh               feeds 更新后：网关 + WiFi SSID
+自编译插件配置.txt                       插件菜单路径备忘（人工参考，CI 不读）
+```
+
+基础配置里 `CONFIG_TARGET_PREINIT_IP` 仍是 `192.168.1.1`，那是镜像预初始化阶段的临时地址，
+选 `11.1` 也不影响正常使用，所以没动它。
+
+## 关于 ttyd
+
+`自编译插件配置.txt` 里的 `luci-app-ttyd` 已进 `config/extra-packages.config`（连带 `ttyd` 本体）。
+如果你手上那份 menuconfig 导出的 `.config` 里它还是 `# CONFIG_PACKAGE_luci-app-ttyd is not set`，
+直接覆盖基础配置也没关系 —— 清单优先级更高，`extra_plugins=true` 时会被写成 `=y`。
 
 ## License
 
-[MIT](https://github.com/P3TERX/Actions-OpenWrt/blob/main/LICENSE) © [**P3TERX**](https://p3terx.com)
+[MIT](LICENSE) © [P3TERX](https://p3terx.com)
