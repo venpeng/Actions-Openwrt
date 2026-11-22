@@ -12,7 +12,7 @@
 
 | 输入 | 取值 | 说明 |
 | --- | --- | --- |
-| `lan_ip` | `1.1`（默认） / `11.1` | 网关地址。`1.1` = `192.168.1.1`，即固件默认；`11.1` = `192.168.11.1` |
+| `lan_ip` | `1.1`（默认） / `11.1` / `all` | 网关地址。`1.1` = `192.168.1.1`，即固件默认；`11.1` = `192.168.11.1`；`all` = 两个各编一份 |
 | `extra_plugins` | `true`（默认） / `false` | 是否编译 `config/extra-packages.config` 里的插件 |
 | `upload_release` | `true` / `false` | `false` 只上传 Artifact，不发 Release |
 
@@ -67,6 +67,21 @@ bash scripts/ci/verify-config.sh /tmp/ow true
 Artifact：`OpenWrt_firmware_<机型>_<日期时间>_<LAN_IP>`，同时发 Release（tag `<年.月.日_时分>_<机型>_<LAN_IP>`）。
 
 带 `_1.1` / `_11.1` 后缀是为了同一台机器两个网段的固件能分清，刷错包会连不上后台。
+
+包里除固件外还带两样：
+
+- `config-immortalwrt-24.10-<LAN_IP>-<日期>.config` —— **展开后的 .config**，即 `make defconfig` 之后真正驱动本次编译的那份（和 `config.buildinfo` 内容相同，只是名字能认出是哪个网段编的）
+- `build-info.txt` —— 源码 / 分支 / 提交号 / 机型 / LAN 网段 / 内核版本 / 额外插件开关
+
+排查「某个插件为什么没进去」时先看这两样，别去翻日志。
+
+## lan_ip = all 是两个 job 并行
+
+`all` 走 `strategy.matrix`，展开成 `build (1.1)` 和 `build (11.1)` 两个 job，各跑一遍完整流程，`fail-fast: false` 保证一个挂了另一个照常出包。
+
+之所以不是「一个 job 编完再改地址编一次」：网关地址写在 `base-files` 的 `config_generate` 里，改完必须重做 rootfs 才会进固件，而 `make` 对 `package/*/files/` 目录的增量判断是看目录 mtime 的 —— 改文件内容不一定触发重编，第二份固件有概率还是旧地址。两个 job 各自从零走一遍，行为和单独编一个网段完全一致，代价是 CI 分钟数翻倍。
+
+`all` 只在真的要一次拿两份固件时用；平时刷一台机器选单个网段就行。
 
 ## 目录
 

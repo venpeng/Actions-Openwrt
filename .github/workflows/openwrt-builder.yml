@@ -8,6 +8,7 @@
 # 下拉：
 #   lan_ip          1.1  = 192.168.1.1（固件默认，等同于不改）
 #                   11.1 = 192.168.11.1
+#                   all  = 两个网段各编一份（matrix 展开成两个并行 job）
 #   extra_plugins   true = config/extra-packages.config 里的插件全部编进去
 #                   false = 那些插件全部置为 not set
 #   upload_release  是否发 Release
@@ -32,13 +33,14 @@ on:
   workflow_dispatch:
     inputs:
       lan_ip:
-        description: 'LAN 网段：1.1 = 192.168.1.1（固件默认），11.1 = 192.168.11.1'
+        description: 'LAN 网段：1.1 / 11.1 各编一份；all = 两个一起编（并行两个 job）'
         required: true
         default: '1.1'
         type: choice
         options:
           - '1.1'
           - '11.1'
+          - all
       extra_plugins:
         description: '编译额外插件（清单：config/extra-packages.config）'
         required: true
@@ -68,12 +70,26 @@ env:
   EXTRA_PLUGINS: ${{ inputs.extra_plugins || 'true' }}
   UPLOAD_RELEASE: ${{ inputs.upload_release || 'true' }}
   TZ: Asia/Shanghai
-  # 由下拉框决定；repository_dispatch 触发时没有 inputs，退回 1.1
-  LAN_IP: ${{ inputs.lan_ip || '1.1' }}
+  # LAN_IP 不在这里：它由下面 jobs.build.strategy.matrix 展开，见 jobs.build.env
 
 jobs:
   build:
     runs-on: ubuntu-22.04
+
+    # lan_ip = all 时展开成两个 job 并行（1.1 / 11.1 各一份固件）。
+    # 为什么不用「一个 job 编两轮」：网关地址写在 base-files 的 config_generate 里，
+    # 改完必须重做 rootfs 才会进固件，靠 make 增量重编依赖不好掌控（files/ 目录
+    # 的 mtime 不一定变），编出来的第二份固件有可能还是旧地址。两个 job 各走一遍
+    # 完整流程，行为和单独编一个网段完全一致，也不怕互相污染。
+    # fail-fast: false —— 一个网段失败不该把另一个也取消掉。
+    strategy:
+      fail-fast: false
+      matrix:
+        # all → ["1.1","11.1"]；单个 → ["1.1"] 或 ["11.1"]
+        # repository_dispatch 触发时没有 inputs，|| 兜底成 1.1
+        lan_ip: ${{ fromJSON(inputs.lan_ip == 'all' && '["1.1","11.1"]' || format('["{0}"]', inputs.lan_ip || '1.1')) }}
+    env:
+      LAN_IP: ${{ matrix.lan_ip }}
 
     steps:
       - name: Checkout
@@ -99,6 +115,8 @@ jobs:
           df -hT $PWD
           git clone $REPO_URL -b $REPO_BRANCH openwrt
           ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
+          echo "COMMIT=$(git -C openwrt rev-parse HEAD)" >> "$GITHUB_ENV"
+          echo "上游提交: $(git -C openwrt rev-parse HEAD)"
 
       - name: Load custom feeds
         run: |
@@ -129,7 +147,7 @@ jobs:
           [ -e files ] && mv files openwrt/files
           chmod +x $DIY_P2_SH
           cd openwrt
-          # LAN_IP 由 workflow env 传入，脚本里读它改网关
+          # LAN_IP 由 job env（matrix 展开）传入，脚本里读它改网关
           LAN_IP="$LAN_IP" $GITHUB_WORKSPACE/$DIY_P2_SH
 
       # 唯一一次 defconfig：之后不再调用，避免写死的配置被重新展开剔除
@@ -176,8 +194,30 @@ jobs:
         run: |
           cd openwrt/bin/targets/*/*
           rm -rf packages
+
+          # 展开后的 .config：defconfig 之后、真正驱动本次编译的那份。
+          # bin/targets 里本来也有 config.buildinfo，但那个名字认不出是哪个
+          # 网段编的（all 时同一次提交有两份固件），所以单独改名存一份。
+          CFG_NAME="config-immortalwrt-24.10-${LAN_IP}-$(date +%Y%m%d).config"
+          cp -f "$GITHUB_WORKSPACE/openwrt/.config" "$CFG_NAME"
+          echo "已附带配置: $CFG_NAME（$(wc -l < "$CFG_NAME") 行）"
+
+          {
+            echo "源码      : immortalwrt (${REPO_URL})"
+            echo "分支      : ${REPO_BRANCH}"
+            echo "提交      : ${COMMIT}"
+            echo "机型      : asus_rt-ac42u"
+            echo "LAN 网段  : 192.168.${LAN_IP}"
+            echo "额外插件  : ${EXTRA_PLUGINS}"
+            echo "构建时间  : $(TZ=Asia/Shanghai date '+%Y-%m-%d %H:%M:%S')"
+            echo "内核      : $(grep -m1 '^CONFIG_LINUX_' "$GITHUB_WORKSPACE/openwrt/.config" | sed 's/^CONFIG_LINUX_//; s/=y$//; s/_/./g')"
+            echo "配置文件  : ${CFG_NAME}（= 本次实际使用的 .config）"
+          } > build-info.txt
+
           echo "FIRMWARE=$PWD" >> $GITHUB_ENV
           echo "status=success" >> $GITHUB_OUTPUT
+          echo "----- 产物 -----"
+          ls -lh
 
       - name: Upload firmware directory
         uses: actions/upload-artifact@main
