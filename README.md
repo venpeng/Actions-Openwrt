@@ -150,7 +150,7 @@ ACRH17 是 IPQ4019 + 256MB 内存 + 128MB NAND，但 rootfs 分区只有约 19.5
   Go 的 AES-GCM 走纯软件，实测比 ChaCha20 慢
 
 如果还嫌挤，最省事的是把 `config/extra-packages.config` 里的
-`luci-app-samba4` / `luci-app-usb-printer` 两组去掉 —— 它们占的 flash 比代理还多。
+`autosamba` / `luci-app-samba4` / `luci-app-usb-printer` 三组去掉 —— 它们占的 flash 比代理还多。
 
 ## lan_ip = all 是两个 job 并行
 

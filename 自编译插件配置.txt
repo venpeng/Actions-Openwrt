@@ -1,4 +1,4 @@
-Extra packages->samba4（23.05 没有 autosamba 这个 meta 包，直接选 luci-app-samba4 + samba4-server）
+Extra packages->autosamba（在 package/emortal/autosamba，依赖 luci-app-samba4 + wsdd2）
 
 ## 插件
 LuCI ---> Applications ---> luci-app-autoreboot  #支持计划重启
