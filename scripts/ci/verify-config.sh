@@ -61,6 +61,9 @@ else
 fi
 grep -q '^CONFIG_LUCI_LANG_zh_Hans=y' .config && echo "中文界面   : 已启用 ✅" \
   || echo "::warning::CONFIG_LUCI_LANG_zh_Hans 未启用，LuCI 将是英文"
+# 24.10 的 LuCI 前端是 JS，而 ssr-plus 是 Lua CBI，必须靠 luci-compat 才能渲染
+grep -qx 'CONFIG_PACKAGE_luci-compat=y' .config && echo "Lua 兼容层 : luci-compat ✅" \
+  || echo "::warning::luci-compat 未启用 —— ssr-plus 是 Lua 界面，缺了它菜单不会出现"
 
 # ---- 4) 额外插件 ----
 if [ "$EXTRA" = "true" ]; then

@@ -125,6 +125,8 @@ ACRH17 是 IPQ4019 + 256MB 内存 + 128MB NAND，但 rootfs 分区只有约 19.5
 - **只留 Xray**：v2ray-core / hysteria / tuic / naiveproxy 都是几十 MB 的 Go 二进制，全部不选
 - **节点优先 chacha20-poly1305**：IPQ4019 是 Cortex-A7，没有 AES 指令加速，
   Go 的 AES-GCM 走纯软件，实测比 ChaCha20 慢
+- **清掉 homeproxy 时代的残留**：`avahi-dbus-daemon` / `libdbus` / `knot-resolver_dnstap`
+  这些是 sing-box 那套带进来的，换 xray 后没人用，留着白占 flash 还多一个守护进程
 
 如果还嫌挤，最省事的是把 `config/extra-packages.config` 里的
 `autosamba` / `luci-app-samba4` / `luci-app-usb-printer` 三组去掉 —— 它们占的 flash 比代理还多。
