@@ -2,9 +2,15 @@
 # Build ImmortalWrt ACRH17 —— 23.05
 #
 # 本分支只编 ACRH17（asus_rt-ac42u，ipq40xx/generic）一台机器，
-# 源码是 venpeng/immortalwrt 的 openwrt-23.05-fix 分支（内核 5.15）。
-# 24.10 那套在同仓库的 acrh17-24.10 分支，两边结构完全一致，
-# 只差源码地址、源码分支和基础配置文件名。
+# 源码是 ImmortalWrt **官方**上游 immortalwrt/immortalwrt 的 openwrt-23.05
+# 分支（内核 5.15）。24.10 那套在同仓库的 acrh17-24.10 分支，
+# 两边结构完全一致，只差源码分支和基础配置文件名。
+#
+# ⚠ 官方 23.05 的 ipq40xx 直接编会挂：分支把内核更到 5.15.198，
+#   但 target/linux/ipq40xx/patches-5.15/401-mmc-sdhci-msm-*.patch
+#   还是旧上下文，target/linux 阶段 "Hunk #1 FAILED at 1814"。
+#   仓库 patches/ipq40xx-5.15/ 里放了一份改好的同名补丁，
+#   由 diysh/acrh17/diy-part1.sh 在 feeds 更新前覆盖进去。
 #
 # 原来 main 上是两个 workflow，差别只有 LAN 网段（1.1 / 11.1），
 # 现在合并成一个，网段放下拉框选。
@@ -20,9 +26,10 @@
 # 配置结构（.config 不再是一份死文件，而是每次现拼）：
 #   config/base/immortalwrt-23.05.config   基础配置（不含机型符号、不含额外插件）
 #   config/extra-packages.config           额外插件清单
+#   patches/ipq40xx-5.15/                  需要覆盖进源码树的内核补丁
 #   scripts/ci/gen-config.sh               基础配置 + 机型 + 插件 → openwrt/.config
 #   scripts/ci/verify-config.sh            defconfig 后校验机型/插件是否真的生效
-#   diysh/acrh17/diy-part1.sh              feeds 更新前
+#   diysh/acrh17/diy-part1.sh              feeds 更新前：替换 401 内核补丁
 #   diysh/acrh17/diy-part2.sh              feeds 更新后，按 LAN_IP 改网关与 ssid
 #
 # 注意：基础配置里 CONFIG_TARGET_PREINIT_IP 仍是 192.168.1.1，
@@ -63,8 +70,8 @@ on:
           - 'false'
 
 env:
-  REPO_URL: https://github.com/venpeng/immortalwrt.git
-  REPO_BRANCH: openwrt-23.05-fix
+  REPO_URL: https://github.com/immortalwrt/immortalwrt
+  REPO_BRANCH: openwrt-23.05
   FEEDS_CONF: feeds.conf.default
   CONFIG_BASE: config/base/immortalwrt-23.05.config
   DIY_P1_SH: diysh/acrh17/diy-part1.sh

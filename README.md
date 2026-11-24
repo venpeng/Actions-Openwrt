@@ -2,10 +2,28 @@
 
 一条 GitHub Actions 流水线，编 ASUS ACRH17（OpenWrt 机型名 `asus_rt-ac42u`，`ipq40xx/generic`）。
 
-源码：`venpeng/immortalwrt`，分支 `openwrt-23.05-fix`，内核 5.15。
+源码：**官方**`immortalwrt/immortalwrt`，分支 `openwrt-23.05`，内核 5.15。
 
-> 同仓库的 **`acrh17-24.10`** 分支是同一套流水线，只差源码地址、源码分支和基础配置文件名。
+> 同仓库的 **`acrh17-24.10`** 分支是同一套流水线，只差源码分支和基础配置文件名。
 > 改 workflow 或 `scripts/ci/*.sh` 时两边要同步改，否则会漂。
+
+## 为什么要带一个内核补丁
+
+官方 23.05 的 ipq40xx **直接编会挂**，在 `target/linux` 阶段（跑了半小时以后）报：
+
+```
+applying .../401-mmc-sdhci-msm-comment-unused-sdhci_msm_set_clock.patch
+Hunk #1 FAILED at 1814.
+```
+
+原因：分支把内核更到 5.15.198，但 `target/linux/ipq40xx/patches-5.15/401-*.patch` 还是旧上下文 ——
+stable 给 `sdhci_msm_set_clock` 加了一行 `struct mmc_ios ios`，`msm_set_clock_rate_for_bus_mode`
+也从 2 参数变成 3 参数，hunk 行号对不上。
+
+处理办法：仓库 `patches/ipq40xx-5.15/` 下放了一份按 5.15.198 刷新的同名补丁，
+`diysh/acrh17/diy-part1.sh` 在 feeds 更新前把它覆盖进源码树。补丁随仓库走，构建时不联网取。
+
+上游哪天自己修好了，脚本会发现源码树里没有这个文件（或内容已经一致），跳过替换并打日志，不会报错。
 
 ## 怎么用
 
@@ -88,9 +106,10 @@ Artifact：`OpenWrt_firmware_<机型>_<日期时间>_<LAN_IP>`，同时发 Relea
 .github/workflows/openwrt-builder.yml   唯一流水线
 config/base/immortalwrt-23.05.config    基础配置
 config/extra-packages.config            额外插件清单
+patches/ipq40xx-5.15/                   要覆盖进源码树的内核补丁（401-sdhci-msm）
 scripts/ci/gen-config.sh                生成 .config
 scripts/ci/verify-config.sh             defconfig 后校验
-diysh/acrh17/diy-part1.sh               feeds 更新前（当前为空壳）
+diysh/acrh17/diy-part1.sh               feeds 更新前：替换 401 内核补丁
 diysh/acrh17/diy-part2.sh               feeds 更新后：网关 + WiFi SSID
 自编译插件配置.txt                       插件菜单路径备忘（人工参考，CI 不读）
 ```
