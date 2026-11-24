@@ -242,7 +242,7 @@ jobs:
             echo "分支      : ${REPO_BRANCH}"
             echo "提交      : ${COMMIT}"
             echo "机型      : asus_rt-ac42u"
-            echo "代理内核  : helloworld xray ${HW_VERSION}（提交 ${HW_COMMIT:-?}）"
+            echo "代理内核  : helloworld xray ${HW_VERSION}（提交 ${HW_COMMIT_SHORT:-?}）"
             echo "LAN 网段  : 192.168.${LAN_IP}"
             echo "额外插件  : ${EXTRA_PLUGINS}"
             echo "构建时间  : $(TZ=Asia/Shanghai date '+%Y-%m-%d %H:%M:%S')"

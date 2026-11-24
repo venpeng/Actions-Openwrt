@@ -45,6 +45,11 @@ helloworld 从 2025-04 起把 xray 提到 25.3.31，24.10 就再也编不过了�
 映射写在 `diysh/acrh17/diy-part1.sh` 里，workflow 只传版本号。CI 里有两道保险 ——
 `Update feeds` 步骤打印实际 xray 版本，`verify-config.sh` defconfig 后再核对一次，不一致就告警。
 
+> ⚠ **SHA 必须写满 40 位**。`scripts/feeds` 对 `^xxx` 的处理是
+> `git fetch --depth=1 origin xxx`，短 SHA 会被 git 当成 ref 名去找 `refs/heads/f92f566`，
+> 直接报 `fatal: couldn't find remote ref f92f566`（clone 会退回默认分支 master，
+> 然后 xray 变成 26.x，编译期才炸）。40 位全 SHA 才会走「按对象拉取」，GitHub 支持这种拉法。
+
 ## 配置怎么组织
 
 `.config` 不再是一份死文件，每次构建现拼：
