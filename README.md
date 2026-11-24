@@ -65,7 +65,7 @@ xray 版本从下拉选：`24.12.31`（默认）或 `1.8.24`。
 `.config` 不是死文件，每次构建现拼：
 
 ```
-config/base/immortalwrt-23.05.config   基础配置（种子，只写必须指定的项）
+config/base/immortalwrt-23.05.config   基础配置（完整 .config，已剥离机型/插件/代理残留）
 config/extra-packages.config           额外插件清单
 scripts/ci/gen-config.sh               基础配置 + 机型 + 插件 → openwrt/.config
 scripts/ci/verify-config.sh            defconfig 之后校验，30 秒内暴露静默丢包
@@ -80,19 +80,20 @@ scripts/ci/verify-config.sh            defconfig 之后校验，30 秒内暴露�
 
 机型符号必须追加而不是留在文件里 —— 否则换机型要改配置文件；而且 defconfig 会静默丢弃源码树里不存在的设备符号、回落到子目标默认机型，编出来是别的机器的固件。所以 `verify-config.sh` 在 defconfig 后硬性检查这一点。
 
-### 为什么 23.05 的 base 是「种子」而不是完整 .config
+### 基础配置从哪来
 
-24.10 分支用的是 7000 行 menuconfig 导出的完整配置，直接抄到 23.05 会有大量符号对不上，
-被 defconfig 静默丢掉。而 immortalwrt 23.05 的默认包本来就够用（`include/target.mk`）：
+`config/base/immortalwrt-23.05.config` 是本地 Ubuntu 里 `make menuconfig` 导出的**完整 `.config`**
+（7483 行 → 清理后 7339 行），不是手写的种子。清理分三类，其余保持原样：
 
-- `DEFAULT_PACKAGES.router` → `dnsmasq-full` / `firewall4` / `nftables` / `ppp`
-- `DEFAULT_PACKAGES.tweak` → `luci` / `luci-compat` / `luci-lib-ipkg` / `luci-app-opkg` / `default-settings-chn`
-- `ipq40xx` 的 `target.mk` → `kmod-ath10k-ct` / `wpad-openssl` / `autocore` / `automount` / `luci-app-cpufreq`
+| 类别 | 处理 | 为什么 |
+| --- | --- | --- |
+| `CONFIG_TARGET_ipq40xx_generic_DEVICE_*`、`CONFIG_TARGET_PROFILE`、`MULTI_PROFILE`、`ALL_PROFILES`、`PER_DEVICE_ROOTFS`、`CONFIG_DEFAULT_*` | 删掉，运行时由 `gen-config.sh` 追加 | 写死在文件里，换机型就得改配置；而且 defconfig 对不存在的设备符号是静默丢弃、回落到子目标默认机型 |
+| `config/extra-packages.config` 里的 24 个插件符号 | 删掉，只由 `extra_plugins` 开关写入 | 留在 base 里会「关不掉」——`extra_plugins=false` 也照样编进去 |
+| `luci-app-homeproxy` / `sing-box` / `i18n-homeproxy`，以及 homeproxy 带进来的 `avahi`/`dbus`、passwall 残留的 `INCLUDE_*`、`knot-resolver_dnstap` | 删掉 | 本分支用 ssr-plus + xray 替代；残留项会被 defconfig 自动补回，若别的包真依赖它们 |
 
-所以种子只写：目标平台、中文界面、主题、`dnsmasq-full`、bash/curl/jq，其余交给 `make defconfig`。
+改配置：本地重新 `make menuconfig` 导出 `.config` 覆盖它即可，`gen-config.sh` 会再兜底清一遍机型/插件符号。
 
-首次构建的产物里带展开后的完整 `.config`，确认没问题后可以整份拷回来覆盖
-`config/base/immortalwrt-23.05.config`（脚本带兜底清理，混进机型符号也不怕）。
+展开后一共 281 个包（24.10 那份是 292），19.5MB rootfs 偏紧，第一次构建留意 `Image too big`。
 
 ## 改配置的两种姿势
 
@@ -121,7 +122,7 @@ curl -sL https://raw.githubusercontent.com/immortalwrt/immortalwrt/openwrt-23.05
   > /tmp/ow/target/linux/ipq40xx/image/generic.mk
 
 bash scripts/ci/gen-config.sh /tmp/ow config/base/immortalwrt-23.05.config true
-bash scripts/ci/verify-config.sh /tmp/ow true     # 种子阶段无线/插件项会是 warning，属正常
+bash scripts/ci/verify-config.sh /tmp/ow true     # 只有「feeds/helloworld 不存在」一条 warning，属正常
 ```
 
 ## 产物
@@ -166,7 +167,7 @@ ACRH17 是 IPQ4019 + 256MB 内存 + 128MB NAND，但 rootfs 分区只有约 19.5
 
 ```
 .github/workflows/openwrt-builder.yml   唯一流水线
-config/base/immortalwrt-23.05.config    基础配置（种子）
+config/base/immortalwrt-23.05.config    基础配置（完整 .config）
 config/extra-packages.config            额外插件清单
 scripts/ci/gen-config.sh                生成 .config
 scripts/ci/verify-config.sh             defconfig 后校验

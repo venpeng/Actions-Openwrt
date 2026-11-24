@@ -10,3 +10,6 @@ gen
 
 # 本项目的 agent 工作目录（记忆/配置），不入库
 .workbuddy/
+
+# 用户提供的原始 menuconfig 导出（仅本地参考，内容已固化进 config/base/）
+/config/.config
