@@ -57,6 +57,37 @@ else
   echo "src-git helloworld ${HELLOWORLD_URL}^${HW_COMMIT}" >> feeds.conf.default
 fi
 
+# ---------------------------------------------------------------
+# 内核补丁修正：immortalwrt 23.05 的 401 补丁对不上 5.15.198
+#
+# 现象（target/linux/compile 阶段）：
+#   applying .../401-mmc-sdhci-msm-comment-unused-sdhci_msm_set_clock.patch
+#   Hunk #1 FAILED at 1814.
+#
+# 原因：分支把内核更到 5.15.198，但 ipq40xx/patches-5.15/401 还是旧上下文。
+# stable 回填给 sdhci_msm_set_clock 加了一行 `struct mmc_ios ios`，
+# msm_set_clock_rate_for_bus_mode 也从 2 参数变成 3 参数，hunk 自然对不上。
+#
+# 处理：用 openwrt 官方 23.05 已刷新的同名补丁覆盖（内容一致，只是 hunk 行号
+# 和这几行 backport 对上了）。补丁存在仓库 patches/ 下，不依赖构建时联网。
+# ---------------------------------------------------------------
+REPO_ROOT="${GITHUB_WORKSPACE:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
+K401="401-mmc-sdhci-msm-comment-unused-sdhci_msm_set_clock.patch"
+SRC401="$REPO_ROOT/patches/ipq40xx-5.15/$K401"
+DST401="target/linux/ipq40xx/patches-5.15/$K401"
+if [ -f "$SRC401" ] && [ -f "$DST401" ]; then
+  if cmp -s "$SRC401" "$DST401"; then
+    echo "内核补丁 $K401 已是修正版，跳过"
+  else
+    cp -f "$SRC401" "$DST401"
+    echo "已替换内核补丁: $K401（适配 5.15.198 的 sdhci-msm.c）"
+  fi
+elif [ -f "$SRC401" ]; then
+  echo "-- 源码树里没有 $K401（内核版本变了？），跳过替换"
+else
+  echo "::warning::仓库里缺少 patches/ipq40xx-5.15/$K401，构建可能在 401 补丁处失败"
+fi
+
 # 给后续步骤（build-info.txt）用；本地手动跑时没有 GITHUB_ENV，忽略即可
 if [ -n "${GITHUB_ENV:-}" ]; then
   {

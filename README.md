@@ -171,10 +171,32 @@ config/base/immortalwrt-23.05.config    基础配置（完整 .config）
 config/extra-packages.config            额外插件清单
 scripts/ci/gen-config.sh                生成 .config
 scripts/ci/verify-config.sh             defconfig 后校验
-diysh/acrh17/diy-part1.sh               feeds 更新前：按 hw_version 给 helloworld 钉提交
+diysh/acrh17/diy-part1.sh               feeds 更新前：钉 helloworld 提交 + 替换 401 内核补丁
 diysh/acrh17/diy-part2.sh               feeds 更新后：网关 + WiFi SSID
+patches/ipq40xx-5.15/401-*.patch        修正版内核补丁（适配 5.15.198）
 自编译插件配置.txt                       插件菜单路径备忘（人工参考，CI 不读）
 ```
+
+## 已知补丁修正：401-mmc-sdhci-msm
+
+immortalwrt 23.05 把内核更到 **5.15.198**，但 `target/linux/ipq40xx/patches-5.15/401-mmc-sdhci-msm-comment-unused-sdhci_msm_set_clock.patch`
+还是旧上下文，构建会卡在 `target/linux/compile`：
+
+```
+Applying .../401-mmc-sdhci-msm-comment-unused-sdhci_msm_set_clock.patch
+patching file drivers/mmc/host/sdhci-msm.c
+Hunk #1 FAILED at 1814.
+Patch failed!
+```
+
+原因是 stable 回填给 `sdhci_msm_set_clock` 加了一行 `struct mmc_ios ios`，
+`msm_set_clock_rate_for_bus_mode()` 也从 2 参数变成 3 参数，补丁里那 43 行对不上了。
+
+处理方式：仓库里存了一份 openwrt 官方 23.05 已刷新的同名补丁（`patches/ipq40xx-5.15/`），
+`diy-part1.sh` 在 feeds 更新前覆盖进源码树，并用 `cmp` 做幂等判断。
+
+> 如果哪天 immortalwrt 自己把补丁刷新了，覆盖的仍是等价内容，不影响；
+> 如果他们换了内核版本把这个补丁删了，脚本检测不到目标文件会跳过并打印提示。
 
 ## 关于 ttyd
 
