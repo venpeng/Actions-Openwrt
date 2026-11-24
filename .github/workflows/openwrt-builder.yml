@@ -4,7 +4,7 @@
 # 本分支只编 ACRH17（asus_rt-ac42u，ipq40xx/generic）一台机器，
 # 源码是 immortalwrt 的 **openwrt-23.05**（内核 5.15，比 24.10 更轻）。
 #
-# 与 acrh17-helloworld（24.10）的差异只有两处：
+# 与 acrh17-24.10-helloworld 的差异只有两处：
 #   1. 源码分支 24.10 → 23.05
 #   2. xray 版本上限更低：23.05 的 golang 是 1.21.13，
 #      只能编到 xray 24.12.31（再往上的 25.1.1 要 go 1.23）
