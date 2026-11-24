@@ -1,42 +1,39 @@
 # =============================================================
-# Build ImmortalWrt ACRH17
+# Build ImmortalWrt ACRH17 (23.05)
 #
-# 本分支只编 ACRH17（asus_rt-ac42u，ipq40xx/generic）一台机器。
-# 原来 main 上是两个 workflow，差别只有 LAN 网段（1.1 / 11.1），
-# 现在合并成一个，网段放下拉框选。
+# 本分支只编 ACRH17（asus_rt-ac42u，ipq40xx/generic）一台机器，
+# 源码是 immortalwrt 的 **openwrt-23.05**（内核 5.15，比 24.10 更轻）。
 #
-# 与 acrh17 分支的唯一区别：**代理内核从 homeproxy 换成 helloworld**。
-#   - helloworld feed 钉在 f92f566（xray-core 25.1.1）
-#     24.10 的 golang 是 1.23.12，xray 从 25.3.31 起要 go 1.24，编不过
-#   - 换掉 homeproxy 是因为 256MB 内存跑 sing-box 吃力
-#   - MosDNS 显式关掉（第二个常驻 Go 进程），分流用 chinadns-ng
+# 与 acrh17-helloworld（24.10）的差异只有两处：
+#   1. 源码分支 24.10 → 23.05
+#   2. xray 版本上限更低：23.05 的 golang 是 1.21.13，
+#      只能编到 xray 24.12.31（再往上的 25.1.1 要 go 1.23）
+#      基础配置也得换（23.05 用「种子 + defconfig 展开」）
+#   插件清单、机型、脚本逻辑、缓存策略完全一致。
 #
 # 下拉：
 #   lan_ip          1.1  = 192.168.1.1（固件默认，等同于不改）
 #                   11.1 = 192.168.11.1
 #                   all  = 两个网段各编一份（matrix 展开成两个并行 job）
 #   hw_version      helloworld 版本（决定 xray 内核）
-#                   25.1.1   = f92f566（2025-03-30，默认）
-#                   24.12.31 = 5eeaf1c（2025-01-10）
-#                   两个都能在 24.10 上编，Go 1.23.12 够用
+#                   24.12.31 = 5eeaf1c（2025-01-10，默认，推荐）
+#                   1.8.24   = 521e396（2024-10-14）
+#                   两个都能在 23.05 上编；1.8.24 配套的 ssr-plus 188
+#                   不支持 hy2:// 订阅，除非有明确理由，否则用 24.12.31
 #   extra_plugins   true = config/extra-packages.config 里的插件全部编进去
 #                   false = 那些插件全部置为 not set
 #   upload_release  是否发 Release
 #
-# 配置结构（.config 不再是一份死文件，而是每次现拼）：
-#   config/base/immortalwrt-24.10.config   基础配置（不含机型符号、不含额外插件）
+# 配置结构（.config 不是死文件，每次现拼）：
+#   config/base/immortalwrt-23.05.config   基础配置（种子，其余交给 defconfig）
 #   config/extra-packages.config           额外插件清单
 #   scripts/ci/gen-config.sh               基础配置 + 机型 + 插件 → openwrt/.config
 #   scripts/ci/verify-config.sh            defconfig 后校验机型/插件/helloworld 版本
 #   diysh/acrh17/diy-part1.sh              feeds 更新前（加 helloworld feed 并钉提交）
 #   diysh/acrh17/diy-part2.sh              feeds 更新后，按 LAN_IP 改网关与 ssid
-#
-# 注意：基础配置里 CONFIG_TARGET_PREINIT_IP 仍是 192.168.1.1，
-#       那是镜像预初始化阶段的地址，只在首启未配置时短暂生效，
-#       选 11.1 也不影响正常使用，所以不动它。
 # =============================================================
 
-name: Build ImmortalWrt ACRH17
+name: Build ImmortalWrt ACRH17 (23.05)
 
 on:
   repository_dispatch:
@@ -52,13 +49,13 @@ on:
           - '11.1'
           - all
       hw_version:
-        description: 'helloworld 版本（xray 内核）：25.1.1 = 2025-03-30 版；24.12.31 = 2025-01-10 版'
+        description: 'helloworld 版本（xray 内核）：24.12.31 = 2025-01-10 版（推荐）；1.8.24 = 2024-10-14 版'
         required: true
-        default: '25.1.1'
+        default: '24.12.31'
         type: choice
         options:
-          - '25.1.1'
           - '24.12.31'
+          - '1.8.24'
       extra_plugins:
         description: '编译额外插件（清单：config/extra-packages.config）'
         required: true
@@ -78,16 +75,16 @@ on:
 
 env:
   REPO_URL: https://github.com/immortalwrt/immortalwrt
-  REPO_BRANCH: openwrt-24.10
+  REPO_BRANCH: openwrt-23.05
   FEEDS_CONF: feeds.conf.default
-  CONFIG_BASE: config/base/immortalwrt-24.10.config
+  CONFIG_BASE: config/base/immortalwrt-23.05.config
   DIY_P1_SH: diysh/acrh17/diy-part1.sh
   DIY_P2_SH: diysh/acrh17/diy-part2.sh
   UPLOAD_BIN_DIR: false
   UPLOAD_FIRMWARE: true
   EXTRA_PLUGINS: ${{ inputs.extra_plugins || 'true' }}
   # helloworld 版本 → 具体提交的映射在 diy-part1.sh 里，这里只传版本号
-  HW_VERSION: ${{ inputs.hw_version || '25.1.1' }}
+  HW_VERSION: ${{ inputs.hw_version || '24.12.31' }}
   UPLOAD_RELEASE: ${{ inputs.upload_release || 'true' }}
   TZ: Asia/Shanghai
   # LAN_IP 不在这里：它由下面 jobs.build.strategy.matrix 展开，见 jobs.build.env
@@ -233,7 +230,7 @@ jobs:
           # 展开后的 .config：defconfig 之后、真正驱动本次编译的那份。
           # bin/targets 里本来也有 config.buildinfo，但那个名字认不出是哪个
           # 网段编的（all 时同一次提交有两份固件），所以单独改名存一份。
-          CFG_NAME="config-immortalwrt-24.10-${LAN_IP}-$(date +%Y%m%d).config"
+          CFG_NAME="config-immortalwrt-23.05-${LAN_IP}-$(date +%Y%m%d).config"
           cp -f "$GITHUB_WORKSPACE/openwrt/.config" "$CFG_NAME"
           echo "已附带配置: $CFG_NAME（$(wc -l < "$CFG_NAME") 行）"
 

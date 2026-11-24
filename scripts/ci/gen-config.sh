@@ -2,7 +2,7 @@
 # =============================================================
 # scripts/ci/gen-config.sh —— 生成本次编译用的 .config（ACRH17）
 #
-#   基础配置（config/base/immortalwrt-24.10.config）
+#   基础配置（config/base/immortalwrt-23.05.config）
 #     + 机型符号（asus_rt-ac42u）
 #     + 额外插件开关（config/extra-packages.config）
 #

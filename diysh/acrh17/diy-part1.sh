@@ -8,37 +8,43 @@
 # 本分支只做一件事：把 helloworld 加成 feed，按 workflow 下拉的
 # HW_VERSION 固定到对应的提交。
 #
-# 为什么要钉提交：
-#   immortalwrt 24.10 的 golang 是 1.23.12，而 helloworld 从 xray
-#   25.3.31 起要求 go 1.24、26.x 要求 go 1.26 —— 24.10 上编不过。
-#   能编的只有 24.12.31 和 25.1.1 这两条版本线：
+# 为什么只有两个版本可选（immortalwrt 23.05 的 golang 是 1.21.13）：
 #
-#     HW_VERSION   分支 tip    xray        要求      日期
-#     24.12.31     5eeaf1c     24.12.31    go 1.21.4 2025-01-10
-#     25.1.1       f92f566     25.1.1      go 1.23   2025-03-30（默认）
+#   HW_VERSION   helloworld 提交    xray         Go 要求   日期
+#   24.12.31     5eeaf1c            24.12.31     go 1.21.4 2025-01-10（默认）
+#   1.8.24       521e396            1.8.24       go 1.21.4 2024-10-14
 #
-#   两个都是上游维护的版本分支（不是 master 上某个散提交）：
-#   分支 tip 是该版本线的最终状态，含 master 上没有的 cherry-pick 修复。
+#   xray 25.1.1 要求 go 1.23，25.3.31 以后要 1.24，26.x 要 1.26 ——
+#   23.05 上全都编不过，所以下拉里只有上面这两个。
+#
+# 两个提交都是「该 xray 版本的最后状态」：
+#   5eeaf1c 是 helloworld 把 xray 升到 25.1.1 之前的最后一个提交
+#   521e396 是 helloworld 把 xray 升到 24.10.16 之前的最后一个提交
+#   （比各自的升版提交多带一个月的 ssr-plus 修复，xray 包本身没变）
+#
+# 差别提醒：1.8.24 配套的是 ssr-plus 188，订阅解析不支持 hy2://
+#   （只有手动填 hysteria2 节点）；24.12.31 配套 189，订阅支持更全。
 #
 # ⚠ SHA 必须写满 40 位，不能写短 SHA：
 #   scripts/feeds 对 ^xxx 的处理是 `git fetch --depth=1 origin xxx`，
-#   短 SHA 会被 git 当成 ref 名去找 refs/heads/f92f566，
-#   报 "fatal: couldn't find remote ref f92f566"。
+#   短 SHA 会被 git 当成 ref 名去找 refs/heads/5eeaf1c，
+#   报 "fatal: couldn't find remote ref 5eeaf1c"，
+#   clone 会退回默认分支 master（xray 26.x），编译期才炸。
 #   40 位全 SHA 才会走「按对象拉取」，GitHub 支持。
 # =============================================================
 
 set -euo pipefail
 
-HW_VERSION="${HW_VERSION:-25.1.1}"
+HW_VERSION="${HW_VERSION:-24.12.31}"
 HELLOWORLD_URL="https://github.com/fw876/helloworld.git"
 
 case "$HW_VERSION" in
-  25.1.1)
-    HW_COMMIT="f92f56614c059d63941e04f37f18aea18e001868" ;;   # R25.1.1  tip，2025-03-30
   24.12.31)
-    HW_COMMIT="5eeaf1cd1ff120b1d41674d263ff5b69c85b3ace" ;;   # R24.12.31 tip，2025-01-10
+    HW_COMMIT="5eeaf1cd1ff120b1d41674d263ff5b69c85b3ace" ;;   # 2025-01-10，xray 24.12.31
+  1.8.24)
+    HW_COMMIT="521e396be6c482e4638a6fadd0a34ba3e86a94b3" ;;   # 2024-10-14，xray 1.8.24
   *)
-    echo "::error::未知 HW_VERSION='${HW_VERSION}'，只支持 25.1.1 / 24.12.31"
+    echo "::error::未知 HW_VERSION='${HW_VERSION}'，23.05 只支持 24.12.31 / 1.8.24"
     exit 1 ;;
 esac
 

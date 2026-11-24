@@ -61,6 +61,9 @@ else
 fi
 grep -q '^CONFIG_LUCI_LANG_zh_Hans=y' .config && echo "中文界面   : 已启用 ✅" \
   || echo "::warning::CONFIG_LUCI_LANG_zh_Hans 未启用，LuCI 将是英文"
+# 23.05 的 LuCI 前端是 JS，而 ssr-plus 是 Lua CBI，必须靠 luci-compat 才能渲染
+grep -qx 'CONFIG_PACKAGE_luci-compat=y' .config && echo "Lua 兼容层 : luci-compat ✅" \
+  || echo "::warning::luci-compat 未启用 —— ssr-plus 是 Lua 界面，缺了它菜单不会出现"
 
 # ---- 4) 额外插件 ----
 if [ "$EXTRA" = "true" ]; then
@@ -87,16 +90,23 @@ else
 fi
 
 # ---- 5) helloworld 来源与版本 ----
-# 24.10 的 Go 1.23 只够编到 xray 25.1.1；feed 的 pin 被改错时，
-# 唯一的表现就是编译期一句 "go.mod requires go >= 1.xx"，很难往这里联想。
-EXPECT_HW="${HW_VERSION:-25.1.1}"
+# 23.05 的 Go 1.21.13 只够编到 xray 24.12.31（25.1.1 要 go 1.23）；
+# feed 的 pin 被改错时，唯一的表现就是编译期一句 "go.mod requires go >= 1.xx"，
+# 很难往这里联想。
+EXPECT_HW="${HW_VERSION:-24.12.31}"
 if [ -d feeds/helloworld ]; then
   HV=$(grep -m1 '^PKG_VERSION:=' feeds/helloworld/xray-core/Makefile 2>/dev/null | sed 's/.*:=//')
   HC=$(git -C feeds/helloworld rev-parse --short HEAD 2>/dev/null || echo '?')
   echo "helloworld : xray-core ${HV:-?}（提交 ${HC}，期望 ${EXPECT_HW}）"
+  case "${HV:-}" in
+    24.12.31|1.8.24) ;;
+    *)
+      echo "::warning::xray-core 是 ${HV:-未知}，不在 23.05 的可编范围内（只有 24.12.31 / 1.8.24）——"
+      echo "         检查 diy-part1.sh 的版本映射；xray ≥25.1.1 要 go 1.23，会在编译期报 go.mod 错误"
+      ;;
+  esac
   if [ "${HV:-}" != "$EXPECT_HW" ]; then
-    echo "::warning::xray-core 是 ${HV:-未知}，和下拉选的 ${EXPECT_HW} 不一致 ——"
-    echo "         检查 diy-part1.sh 的版本映射；版本超出 24.10 的 Go 1.23 会在编译期报 go.mod 错误"
+    echo "::warning::xray-core 是 ${HV:-未知}，和下拉选的 ${EXPECT_HW} 不一致 —— 检查 diy-part1.sh 的版本映射"
   fi
 else
   echo "::warning::feeds/helloworld 不存在 —— diy-part1.sh 没把 feed 加上？"
