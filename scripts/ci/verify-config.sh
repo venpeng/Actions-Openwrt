@@ -86,7 +86,22 @@ else
   echo "额外插件   : 已按要求关闭"
 fi
 
-# ---- 5) 体积粗估（rootfs 包清单行数，仅参考）----
+# ---- 5) helloworld 来源与版本 ----
+# 24.10 的 Go 1.23 只够编到 xray 25.1.1；feed 的 pin 被人改掉时，
+# 唯一的表现就是编译期一句 "go.mod requires go >= 1.xx"，很难往这里联想。
+if [ -d feeds/helloworld ]; then
+  HV=$(grep -m1 '^PKG_VERSION:=' feeds/helloworld/xray-core/Makefile 2>/dev/null | sed 's/.*:=//')
+  HC=$(git -C feeds/helloworld rev-parse --short HEAD 2>/dev/null || echo '?')
+  echo "helloworld : xray-core ${HV:-?}（提交 ${HC}）"
+  if [ "${HV:-}" != "25.1.1" ]; then
+    echo "::warning::xray-core 是 ${HV:-未知}，不是预期的 25.1.1 —— 24.10 只够编到 25.1.1，"
+    echo "         多半会在编译期报 'go.mod requires go >= 1.xx'；检查 diy-part1.sh 里的 ^f92f566"
+  fi
+else
+  echo "::warning::feeds/helloworld 不存在 —— diy-part1.sh 没把 feed 加上？"
+fi
+
+# ---- 6) 体积粗估（rootfs 包清单行数，仅参考）----
 echo "包配置行数 : $(grep -c '^CONFIG_PACKAGE_.*=y' .config)"
 
 echo "========================================"

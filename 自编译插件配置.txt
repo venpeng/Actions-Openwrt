@@ -5,7 +5,7 @@ LuCI ---> Applications ---> luci-app-autoreboot  #支持计划重启
 
 LuCI ---> Applications ---> luci-app-ddns   #动态域名 DNS
 
-LuCI ---> Applications ---> luci-app-homeproxy #immortalwrt家庭代理
+LuCI ---> Applications ---> luci-app-ssr-plus #helloworld 代理（xray 25.1.1，替代 homeproxy）
 
 LuCI ---> Applications ---> luci-app-ttyd   #ttyd终端
 

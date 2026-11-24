@@ -1,10 +1,12 @@
-# Actions-OpenWrt ACRH17
+# Actions-OpenWrt ACRH17（helloworld 版）
 
 一条 GitHub Actions 流水线，编 ASUS ACRH17（OpenWrt 机型名 `asus_rt-ac42u`，`ipq40xx/generic`）。
 
 源码：`immortalwrt/immortalwrt`，分支 `openwrt-24.10`。
+代理内核：**helloworld（`luci-app-ssr-plus` + `xray-core 25.1.1`）**，取代原来的 homeproxy。
 
-原来 `main` 上是两个 workflow，唯一差别是 LAN 网段（`192.168.1.1` 与 `192.168.11.1`），现在合并成一个，网段从下拉框选；插件也从配置里拆出来，用开关控制。
+从 `acrh17` 分支切出来的，唯一区别就是代理内核：ACRH17 只有 256MB 内存，跑 sing-box 吃力，
+换成 xray 后常驻内存明显下降。helloworld feed 钉在 `f92f566`，原因见下面「为什么钉死 25.1.1」。
 
 ## 怎么用
 
@@ -13,8 +15,27 @@
 | 输入 | 取值 | 说明 |
 | --- | --- | --- |
 | `lan_ip` | `1.1`（默认） / `11.1` / `all` | 网关地址。`1.1` = `192.168.1.1`，即固件默认；`11.1` = `192.168.11.1`；`all` = 两个各编一份 |
-| `extra_plugins` | `true`（默认） / `false` | 是否编译 `config/extra-packages.config` 里的插件 |
+| `extra_plugins` | `true`（默认） / `false` | 是否编译 `config/extra-packages.config` 里的插件（代理就在这里面） |
 | `upload_release` | `true` / `false` | `false` 只上传 Artifact，不发 Release |
+
+## 为什么钉死 xray 25.1.1
+
+决定性因素是 Go 版本，不是 xray 本身：
+
+| 组件 | 要求 | immortalwrt 24.10 实际 |
+| --- | --- | --- |
+| `xray-core 25.1.1` | `go 1.23` | **1.23.12** ✅ |
+| `xray-core 25.3.31` 及以后 | `go 1.24` | ❌ |
+| `xray-core 26.x` | `go 1.26` | ❌ |
+
+helloworld 从 2025-04 起把 xray 提到 25.3.31，24.10 就再也编不过了。所以 feed 用
+`src-git helloworld https://github.com/fw876/helloworld.git^f92f566` 钉在 2025-03-30 那一版，
+由 `diysh/acrh17/diy-part1.sh` 负责写入。
+
+`f92f566` 配套的是 xray 25.1.1 / mosdns 5.3.3 / v2ray-core 5.25.0，都满足 Go 1.23。
+
+**不要随手去掉 `^f92f566`**：上游已经到 26.x，编到一半才会报 `go.mod requires go >= 1.26`。
+CI 里有两道保险 —— `Update feeds` 步骤会打印实际 xray 版本，`verify-config.sh` 也会再核一次。
 
 ## 配置怎么组织
 
@@ -22,7 +43,7 @@
 
 ```
 config/base/immortalwrt-24.10.config   基础配置：除机型符号、除额外插件之外的完整配置
-config/extra-packages.config           额外插件清单（21 个符号）
+config/extra-packages.config           额外插件清单（24 个 =y + 1 个显式关闭）
 scripts/ci/gen-config.sh               基础配置 + 机型 + 插件 → openwrt/.config
 scripts/ci/verify-config.sh            defconfig 之后校验，30 秒内暴露静默丢包
 ```
@@ -42,8 +63,13 @@ scripts/ci/verify-config.sh            defconfig 之后校验，30 秒内暴露�
 
 ```
 CONFIG_PACKAGE_luci-app-ttyd=y
-CONFIG_PACKAGE_ttyd=y          # 依赖也写上，关闭开关时才会一起 not set
+CONFIG_PACKAGE_ttyd=y                        # 依赖也写上，关闭开关时才会一起 not set
+# CONFIG_PACKAGE_xxx_INCLUDE_MosDNS is not set # 这种「显式关闭」也认
 ```
+
+第三种写法专门用来对付 **defconfig 会自己打开的选项**（比如 ssr-plus 的 MosDNS 在
+arm/aarch64 上默认 `=y`）。只写 `=y` 的条目在开关关闭时会被改成 `not set`；
+`# ... is not set` 的条目无论开关如何都保持关闭。
 
 不用碰基础配置，也不用改 workflow。
 
@@ -75,6 +101,21 @@ Artifact：`OpenWrt_firmware_<机型>_<日期时间>_<LAN_IP>`，同时发 Relea
 
 排查「某个插件为什么没进去」时先看这两样，别去翻日志。
 
+## 256MB 内存 / 19.5MB rootfs 的取舍
+
+ACRH17 是 IPQ4019 + 256MB 内存 + 128MB NAND，但 rootfs 分区只有约 19.5MB
+（`IMAGE_SIZE := 20439364`），装不下多少东西。本分支的取舍：
+
+- **homeproxy → ssr-plus + xray**：sing-box 常驻比 xray 高，这是换分支的主要原因
+- **MosDNS 显式关闭**：它是第二个常驻 Go 进程（30~50MB），256MB 上负担很重；
+  分流用 `chinadns-ng`（C 实现，几 MB）
+- **只留 Xray**：v2ray-core / hysteria / tuic / naiveproxy 都是几十 MB 的 Go 二进制，全部不选
+- **节点优先 chacha20-poly1305**：IPQ4019 是 Cortex-A7，没有 AES 指令加速，
+  Go 的 AES-GCM 走纯软件，实测比 ChaCha20 慢
+
+如果还嫌挤，最省事的是把 `config/extra-packages.config` 里的
+`autosamba` / `luci-app-samba4` / `luci-app-usb-printer` 三组去掉 —— 它们占的 flash 比代理还多。
+
 ## lan_ip = all 是两个 job 并行
 
 `all` 走 `strategy.matrix`，展开成 `build (1.1)` 和 `build (11.1)` 两个 job，各跑一遍完整流程，`fail-fast: false` 保证一个挂了另一个照常出包。
@@ -91,7 +132,7 @@ config/base/immortalwrt-24.10.config    基础配置
 config/extra-packages.config            额外插件清单
 scripts/ci/gen-config.sh                生成 .config
 scripts/ci/verify-config.sh             defconfig 后校验
-diysh/acrh17/diy-part1.sh               feeds 更新前（当前为空壳）
+diysh/acrh17/diy-part1.sh               feeds 更新前：加 helloworld feed 并钉到 f92f566
 diysh/acrh17/diy-part2.sh               feeds 更新后：网关 + WiFi SSID
 自编译插件配置.txt                       插件菜单路径备忘（人工参考，CI 不读）
 ```

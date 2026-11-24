@@ -78,10 +78,19 @@ set_config() {
 }
 
 # 逐行应用清单文件（忽略注释/空行，去掉可能的 CR）
+#   支持两种条目：
+#     CONFIG_PACKAGE_x=y                正常写入
+#     # CONFIG_PACKAGE_x is not set     显式关闭（用于「默认会被 defconfig 打开」的项，
+#                                      比如 ssr-plus 的 MosDNS 在 arm 上默认 =y）
 apply_list() {
   local file="$1" mode="$2" line sym val
   while IFS= read -r line; do
     line="${line%$'\r'}"
+    if [[ "$line" == "# CONFIG_"*" is not set" ]]; then
+      sym="${line#\# }"; sym="${sym% is not set}"
+      set_config "$sym" n
+      continue
+    fi
     case "$line" in ''|\#*) continue ;; esac
     sym="${line%%=*}"
     val="${line#*=}"

@@ -5,6 +5,12 @@
 # 原来 main 上是两个 workflow，差别只有 LAN 网段（1.1 / 11.1），
 # 现在合并成一个，网段放下拉框选。
 #
+# 与 acrh17 分支的唯一区别：**代理内核从 homeproxy 换成 helloworld**。
+#   - helloworld feed 钉在 f92f566（xray-core 25.1.1）
+#     24.10 的 golang 是 1.23.12，xray 从 25.3.31 起要 go 1.24，编不过
+#   - 换掉 homeproxy 是因为 256MB 内存跑 sing-box 吃力
+#   - MosDNS 显式关掉（第二个常驻 Go 进程），分流用 chinadns-ng
+#
 # 下拉：
 #   lan_ip          1.1  = 192.168.1.1（固件默认，等同于不改）
 #                   11.1 = 192.168.11.1
@@ -17,8 +23,8 @@
 #   config/base/immortalwrt-24.10.config   基础配置（不含机型符号、不含额外插件）
 #   config/extra-packages.config           额外插件清单
 #   scripts/ci/gen-config.sh               基础配置 + 机型 + 插件 → openwrt/.config
-#   scripts/ci/verify-config.sh            defconfig 后校验机型/插件是否真的生效
-#   diysh/acrh17/diy-part1.sh              feeds 更新前
+#   scripts/ci/verify-config.sh            defconfig 后校验机型/插件/helloworld 版本
+#   diysh/acrh17/diy-part1.sh              feeds 更新前（加 helloworld feed 并钉提交）
 #   diysh/acrh17/diy-part2.sh              feeds 更新后，按 LAN_IP 改网关与 ssid
 #
 # 注意：基础配置里 CONFIG_TARGET_PREINIT_IP 仍是 192.168.1.1，
@@ -126,7 +132,22 @@ jobs:
           $GITHUB_WORKSPACE/$DIY_P1_SH
 
       - name: Update feeds
-        run: cd openwrt && ./scripts/feeds update -a
+        run: |
+          cd openwrt
+          ./scripts/feeds update -a
+
+          # helloworld 是本分支的代理内核来源，没拉下来就早点停，
+          # 省得 defconfig 把 ssr-plus 静默丢掉、编完才发现没代理。
+          if [ ! -d feeds/helloworld ]; then
+            echo "::error::feeds/helloworld 不存在 —— diy-part1.sh 的 feed 没加上？"
+            exit 1
+          fi
+          XRAY_VER=$(grep -m1 '^PKG_VERSION:=' feeds/helloworld/xray-core/Makefile | sed 's/.*:=//')
+          echo "helloworld xray-core: ${XRAY_VER}"
+          echo "helloworld 提交: $(git -C feeds/helloworld log -1 --date=short --format='%h %ad %s')"
+          if [ "$XRAY_VER" != "25.1.1" ]; then
+            echo "::warning::xray 不是 25.1.1 —— 24.10 的 Go 1.23 编不过更高版本，检查 diy-part1.sh 的 pin"
+          fi
 
       - name: Install feeds
         run: cd openwrt && ./scripts/feeds install -a
