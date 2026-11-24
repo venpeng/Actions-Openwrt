@@ -3,39 +3,47 @@
 一条 GitHub Actions 流水线，编 ASUS ACRH17（OpenWrt 机型名 `asus_rt-ac42u`，`ipq40xx/generic`）。
 
 源码：`immortalwrt/immortalwrt`，分支 `openwrt-24.10`。
-代理内核：**helloworld（`luci-app-ssr-plus` + `xray-core 25.1.1`）**，取代原来的 homeproxy。
+代理内核：**helloworld（`luci-app-ssr-plus` + `xray-core`）**，取代原来的 homeproxy。
+xray 版本从下拉选：`25.1.1`（默认）或 `24.12.31`。
 
 从 `acrh17` 分支切出来的，唯一区别就是代理内核：ACRH17 只有 256MB 内存，跑 sing-box 吃力，
-换成 xray 后常驻内存明显下降。helloworld feed 钉在 `f92f566`，原因见下面「为什么钉死 25.1.1」。
+换成 xray 后常驻内存明显下降。为什么只有这两个版本可选，见下面「为什么只能选这两个版本」。
 
 ## 怎么用
 
-`Actions` → `Build ImmortalWrt ACRH17` → `Run workflow`，三个输入：
+`Actions` → `Build ImmortalWrt ACRH17` → `Run workflow`，四个输入：
 
 | 输入 | 取值 | 说明 |
 | --- | --- | --- |
 | `lan_ip` | `1.1`（默认） / `11.1` / `all` | 网关地址。`1.1` = `192.168.1.1`，即固件默认；`11.1` = `192.168.11.1`；`all` = 两个各编一份 |
+| `hw_version` | `25.1.1`（默认） / `24.12.31` | helloworld（xray 内核）版本。`25.1.1` 对应提交 `f92f566`（2025-03-30）；`24.12.31` 对应 `5eeaf1c`（2025-01-10） |
 | `extra_plugins` | `true`（默认） / `false` | 是否编译 `config/extra-packages.config` 里的插件（代理就在这里面） |
 | `upload_release` | `true` / `false` | `false` 只上传 Artifact，不发 Release |
 
-## 为什么钉死 xray 25.1.1
+## 为什么只能选这两个版本
 
 决定性因素是 Go 版本，不是 xray 本身：
 
 | 组件 | 要求 | immortalwrt 24.10 实际 |
 | --- | --- | --- |
-| `xray-core 25.1.1` | `go 1.23` | **1.23.12** ✅ |
-| `xray-core 25.3.31` 及以后 | `go 1.24` | ❌ |
-| `xray-core 26.x` | `go 1.26` | ❌ |
+| `xray 24.12.31` | `go 1.21.4` | **1.23.12** ✅ |
+| `xray 25.1.1` | `go 1.23` | **1.23.12** ✅ |
+| `xray 25.3.31` 及以后 | `go 1.24` | ❌ |
+| `xray 26.x` | `go 1.26` | ❌ |
 
-helloworld 从 2025-04 起把 xray 提到 25.3.31，24.10 就再也编不过了。所以 feed 用
-`src-git helloworld https://github.com/fw876/helloworld.git^f92f566` 钉在 2025-03-30 那一版，
-由 `diysh/acrh17/diy-part1.sh` 负责写入。
+helloworld 从 2025-04 起把 xray 提到 25.3.31，24.10 就再也编不过了。所以只能在两条版本线上选，
+两个都是**上游维护的版本分支**（不是 master 上某个散提交），分支 tip 就是该版本线的最终状态：
 
-`f92f566` 配套的是 xray 25.1.1 / mosdns 5.3.3 / v2ray-core 5.25.0，都满足 Go 1.23。
+| `hw_version` | helloworld 分支 | tip 提交 | 日期 | 配套版本 |
+| --- | --- | --- | --- | --- |
+| `25.1.1` | `R25.1.1` | `f92f566` | 2025-03-30 | xray 25.1.1 / mosdns 5.3.3 / v2ray 5.25.0 |
+| `24.12.31` | `R24.12.31` | `5eeaf1c` | 2025-01-10 | xray 24.12.31 / mosdns 5.3.3 / v2ray 5.22.0 |
 
-**不要随手去掉 `^f92f566`**：上游已经到 26.x，编到一半才会报 `go.mod requires go >= 1.26`。
-CI 里有两道保险 —— `Update feeds` 步骤会打印实际 xray 版本，`verify-config.sh` 也会再核一次。
+两者差 74 个提交，大部分是 ssr-plus 的订阅解析修复；xray 本身从 24.12.31 到 25.1.1 只差 8 个小提交
+（两个边缘 bug + 依赖升级）。**默认选 25.1.1**，除非你想避开 2025-01 之后的改动。
+
+映射写在 `diysh/acrh17/diy-part1.sh` 里，workflow 只传版本号。CI 里有两道保险 ——
+`Update feeds` 步骤打印实际 xray 版本，`verify-config.sh` defconfig 后再核对一次，不一致就告警。
 
 ## 配置怎么组织
 
@@ -97,7 +105,7 @@ Artifact：`OpenWrt_firmware_<机型>_<日期时间>_<LAN_IP>`，同时发 Relea
 包里除固件外还带两样：
 
 - `config-immortalwrt-24.10-<LAN_IP>-<日期>.config` —— **展开后的 .config**，即 `make defconfig` 之后真正驱动本次编译的那份（和 `config.buildinfo` 内容相同，只是名字能认出是哪个网段编的）
-- `build-info.txt` —— 源码 / 分支 / 提交号 / 机型 / LAN 网段 / 内核版本 / 额外插件开关
+- `build-info.txt` —— 源码 / 分支 / 提交号 / 机型 / 代理内核版本 / LAN 网段 / 内核版本 / 额外插件开关
 
 排查「某个插件为什么没进去」时先看这两样，别去翻日志。
 
@@ -132,7 +140,7 @@ config/base/immortalwrt-24.10.config    基础配置
 config/extra-packages.config            额外插件清单
 scripts/ci/gen-config.sh                生成 .config
 scripts/ci/verify-config.sh             defconfig 后校验
-diysh/acrh17/diy-part1.sh               feeds 更新前：加 helloworld feed 并钉到 f92f566
+diysh/acrh17/diy-part1.sh               feeds 更新前：按 hw_version 给 helloworld 钉提交
 diysh/acrh17/diy-part2.sh               feeds 更新后：网关 + WiFi SSID
 自编译插件配置.txt                       插件菜单路径备忘（人工参考，CI 不读）
 ```
