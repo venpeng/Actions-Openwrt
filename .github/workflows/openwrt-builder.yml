@@ -1,39 +1,39 @@
 # =============================================================
-# Build ImmortalWrt ACRH17 (23.05)
+# Build ImmortalWrt ACRH17 (21.02)
 #
 # 本分支只编 ACRH17（asus_rt-ac42u，ipq40xx/generic）一台机器，
-# 源码是 immortalwrt 的 **openwrt-23.05**（内核 5.15，比 24.10 更轻）。
+# 源码是 immortalwrt 的 **openwrt-21.02**（内核 5.4，LuCI 还是 Lua 版）。
 #
-# 与 acrh17-24.10-helloworld 的差异只有两处：
-#   1. 源码分支 24.10 → 23.05
-#   2. xray 版本上限更低：23.05 的 golang 是 1.21.13，
-#      只能编到 xray 24.12.31（再往上的 25.1.1 要 go 1.23）
-#      基础配置也得换（23.05 用「种子 + defconfig 展开」）
-#   插件清单、机型、脚本逻辑、缓存策略完全一致。
+# 与其他 helloworld 分支的差异：
+#   1. 21.02 自带 golang 1.19.13，编不了 xray >= 1.8.24 —— 由
+#      scripts/ci/post-feeds.sh 把 feeds/packages/lang/golang 换成 1.23.12
+#   2. 21.02 自带 luci-app-ssr-plus(187) + xray-core(1.8.3)，与 helloworld
+#      包名冲突 —— 同一脚本摘掉内置 symlink，强制从 helloworld 重装
+#   3. 用 firewall3/iptables：UPnP 只有 miniupnpd，没有 -nftables 变体
 #
 # 下拉：
-#   lan_ip          1.1  = 192.168.1.1（固件默认，等同于不改）
-#                   11.1 = 192.168.11.1
-#                   all  = 两个网段各编一份（matrix 展开成两个并行 job）
+#   lan_ip          1.1 = 192.168.1.1（默认） / 11.1 / all（两个并行 job）
 #   hw_version      helloworld 版本（决定 xray 内核）
-#                   24.12.31 = 5eeaf1c（2025-01-10，默认，推荐）
+#                   25.1.1   = f92f566（2025-03-30，默认）
+#                   24.12.31 = 5eeaf1c（2025-01-10）
 #                   1.8.24   = 521e396（2024-10-14）
-#                   两个都能在 23.05 上编；1.8.24 配套的 ssr-plus 188
-#                   不支持 hy2:// 订阅，除非有明确理由，否则用 24.12.31
+#                   三个都要求 go >= 1.21，靠 post-feeds 的 1.23.12 满足
 #   extra_plugins   true = config/extra-packages.config 里的插件全部编进去
 #                   false = 那些插件全部置为 not set
 #   upload_release  是否发 Release
 #
-# 配置结构（.config 不是死文件，每次现拼）：
-#   config/base/immortalwrt-23.05.config   基础配置（种子，其余交给 defconfig）
+# 配置结构：
+#   config/base/immortalwrt-21.02.config   基础配置（已剥离机型/插件/代理符号）
 #   config/extra-packages.config           额外插件清单
-#   scripts/ci/gen-config.sh               基础配置 + 机型 + 插件 → openwrt/.config
-#   scripts/ci/verify-config.sh            defconfig 后校验机型/插件/helloworld 版本
+#   feeds.conf                             21.02 的四个 feed（浅克隆）
+#   scripts/ci/gen-config.sh               基础配置 + 机型 + 插件 -> openwrt/.config
+#   scripts/ci/post-feeds.sh               golang 升级 + 内置代理替换
+#   scripts/ci/verify-config.sh            defconfig 后校验机型/插件/版本
 #   diysh/acrh17/diy-part1.sh              feeds 更新前（加 helloworld feed 并钉提交）
 #   diysh/acrh17/diy-part2.sh              feeds 更新后，按 LAN_IP 改网关与 ssid
 # =============================================================
 
-name: Build ImmortalWrt ACRH17 (23.05)
+name: Build ImmortalWrt ACRH17 (21.02)
 
 on:
   repository_dispatch:
@@ -49,11 +49,12 @@ on:
           - '11.1'
           - all
       hw_version:
-        description: 'helloworld 版本（xray 内核）：24.12.31 = 2025-01-10 版（推荐）；1.8.24 = 2024-10-14 版'
+        description: 'helloworld 版本（xray 内核）：25.1.1 = 2025-03-30 版（推荐）；24.12.31 = 2025-01-10；1.8.24 = 2024-10-14'
         required: true
-        default: '24.12.31'
+        default: '25.1.1'
         type: choice
         options:
+          - '25.1.1'
           - '24.12.31'
           - '1.8.24'
       extra_plugins:
@@ -75,16 +76,17 @@ on:
 
 env:
   REPO_URL: https://github.com/immortalwrt/immortalwrt
-  REPO_BRANCH: openwrt-23.05
-  FEEDS_CONF: feeds.conf.default
-  CONFIG_BASE: config/base/immortalwrt-23.05.config
+  REPO_BRANCH: openwrt-21.02
+  # 21.02 上游用 src-git-full，全历史拉四个 feed 太慢；仓库里的 feeds.conf 改成浅克隆
+  FEEDS_CONF: feeds.conf
+  CONFIG_BASE: config/base/immortalwrt-21.02.config
   DIY_P1_SH: diysh/acrh17/diy-part1.sh
   DIY_P2_SH: diysh/acrh17/diy-part2.sh
   UPLOAD_BIN_DIR: false
   UPLOAD_FIRMWARE: true
   EXTRA_PLUGINS: ${{ inputs.extra_plugins || 'true' }}
   # helloworld 版本 → 具体提交的映射在 diy-part1.sh 里，这里只传版本号
-  HW_VERSION: ${{ inputs.hw_version || '24.12.31' }}
+  HW_VERSION: ${{ inputs.hw_version || '25.1.1' }}
   UPLOAD_RELEASE: ${{ inputs.upload_release || 'true' }}
   TZ: Asia/Shanghai
   # LAN_IP 不在这里：它由下面 jobs.build.strategy.matrix 展开，见 jobs.build.env
@@ -164,6 +166,17 @@ jobs:
         run: cd openwrt && ./scripts/feeds install -a
 
       # ---------------------------------------------------------------
+      # 21.02 专属：feeds 装完之后的两处替换
+      #   1) golang 1.19.13 → 1.23.12（xray 1.8.24 起就要 go 1.21）
+      #   2) 用 helloworld 覆盖内置 luci-app-ssr-plus(187) / xray-core(1.8.3)
+      # 必须在 defconfig 之前完成：gen-config 写的符号要靠它解析到正确版本
+      # ---------------------------------------------------------------
+      - name: Replace golang & builtin proxy
+        run: |
+          chmod +x "$GITHUB_WORKSPACE/scripts/ci/post-feeds.sh"
+          bash "$GITHUB_WORKSPACE/scripts/ci/post-feeds.sh" "$GITHUB_WORKSPACE/openwrt"
+
+      # ---------------------------------------------------------------
       # 生成 .config：基础配置 + 机型符号 + 额外插件开关
       # ---------------------------------------------------------------
       - name: Generate .config
@@ -230,7 +243,7 @@ jobs:
           # 展开后的 .config：defconfig 之后、真正驱动本次编译的那份。
           # bin/targets 里本来也有 config.buildinfo，但那个名字认不出是哪个
           # 网段编的（all 时同一次提交有两份固件），所以单独改名存一份。
-          CFG_NAME="config-immortalwrt-23.05-${LAN_IP}-$(date +%Y%m%d).config"
+          CFG_NAME="config-immortalwrt-21.02-${LAN_IP}-$(date +%Y%m%d).config"
           cp -f "$GITHUB_WORKSPACE/openwrt/.config" "$CFG_NAME"
           echo "已附带配置: $CFG_NAME（$(wc -l < "$CFG_NAME") 行）"
 
@@ -240,6 +253,7 @@ jobs:
             echo "提交      : ${COMMIT}"
             echo "机型      : asus_rt-ac42u"
             echo "代理内核  : helloworld xray ${HW_VERSION}（提交 ${HW_COMMIT_SHORT:-?}）"
+            echo "Go 工具链 : $(grep -hE '^GO_VERSION_(MAJOR_MINOR|PATCH):=' "$GITHUB_WORKSPACE/openwrt/feeds/packages/lang/golang/golang/Makefile" | sed 's/.*:=//' | tr '\n' '.' | sed 's/\.$//')（post-feeds 覆盖）"
             echo "LAN 网段  : 192.168.${LAN_IP}"
             echo "额外插件  : ${EXTRA_PLUGINS}"
             echo "构建时间  : $(TZ=Asia/Shanghai date '+%Y-%m-%d %H:%M:%S')"

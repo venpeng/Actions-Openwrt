@@ -61,9 +61,24 @@ else
 fi
 grep -q '^CONFIG_LUCI_LANG_zh_Hans=y' .config && echo "中文界面   : 已启用 ✅" \
   || echo "::warning::CONFIG_LUCI_LANG_zh_Hans 未启用，LuCI 将是英文"
-# 23.05 的 LuCI 前端是 JS，而 ssr-plus 是 Lua CBI，必须靠 luci-compat 才能渲染
-grep -qx 'CONFIG_PACKAGE_luci-compat=y' .config && echo "Lua 兼容层 : luci-compat ✅" \
-  || echo "::warning::luci-compat 未启用 —— ssr-plus 是 Lua 界面，缺了它菜单不会出现"
+# 21.02 的 LuCI 是 Lua 版，ssr-plus 直接可用，不需要 luci-compat；
+# 真正要盯的是「内置 ssr-plus 有没有被 helloworld 替换掉」
+SSRP_LINK=$(find package/feeds -maxdepth 2 -name luci-app-ssr-plus -type l 2>/dev/null | head -1)
+if [ -n "$SSRP_LINK" ] && readlink -f "$SSRP_LINK" | grep -q '/feeds/helloworld/'; then
+  echo "代理来源   : helloworld ✅"
+else
+  echo "::warning::luci-app-ssr-plus 不是来自 helloworld —— post-feeds.sh 没生效？"
+fi
+# 21.02 自带 golang 1.19.13，编不了 xray >=1.8.24；post-feeds 应已换成 1.23.12
+GO_MK=feeds/packages/lang/golang/golang/Makefile
+if [ -f "$GO_MK" ]; then
+  GO_V=$(grep -m1 '^GO_VERSION_MAJOR_MINOR:=' "$GO_MK" | sed 's/.*:=//')
+  echo "Go 工具链  : ${GO_V:-?}（需 >= 1.21）"
+  case "$GO_V" in
+    1.2[1-9]|1.[3-9][0-9]) ;;
+    *) echo "::error::golang ${GO_V:-未知} 低于 1.21，xray 编不过（post-feeds.sh 没跑？）"; FAIL=1 ;;
+  esac
+fi
 
 # ---- 4) 额外插件 ----
 if [ "$EXTRA" = "true" ]; then
@@ -90,19 +105,19 @@ else
 fi
 
 # ---- 5) helloworld 来源与版本 ----
-# 23.05 的 Go 1.21.13 只够编到 xray 24.12.31（25.1.1 要 go 1.23）；
-# feed 的 pin 被改错时，唯一的表现就是编译期一句 "go.mod requires go >= 1.xx"，
-# 很难往这里联想。
-EXPECT_HW="${HW_VERSION:-24.12.31}"
+# 21.02 自带 golang 1.19.13；post-feeds 换成 1.23.12 之后，
+# 能编到 xray 25.1.1（25.3.31+ 要 go 1.24，编不了）。
+# pin 被改错时唯一的表现就是编译期一句 "go.mod requires go >= 1.xx"。
+EXPECT_HW="${HW_VERSION:-25.1.1}"
 if [ -d feeds/helloworld ]; then
   HV=$(grep -m1 '^PKG_VERSION:=' feeds/helloworld/xray-core/Makefile 2>/dev/null | sed 's/.*:=//')
   HC=$(git -C feeds/helloworld rev-parse --short HEAD 2>/dev/null || echo '?')
   echo "helloworld : xray-core ${HV:-?}（提交 ${HC}，期望 ${EXPECT_HW}）"
   case "${HV:-}" in
-    24.12.31|1.8.24) ;;
+    25.1.1|24.12.31|1.8.24) ;;
     *)
-      echo "::warning::xray-core 是 ${HV:-未知}，不在 23.05 的可编范围内（只有 24.12.31 / 1.8.24）——"
-      echo "         检查 diy-part1.sh 的版本映射；xray ≥25.1.1 要 go 1.23，会在编译期报 go.mod 错误"
+      echo "::warning::xray-core 是 ${HV:-未知}，不在本分支的可编范围内（25.1.1 / 24.12.31 / 1.8.24）——"
+      echo "         检查 diy-part1.sh 的版本映射；xray 25.3.31+ 要 go 1.24，会在编译期报 go.mod 错误"
       ;;
   esac
   if [ "${HV:-}" != "$EXPECT_HW" ]; then

@@ -1,13 +1,21 @@
-Extra packages->autosamba（在 package/emortal/autosamba，依赖 luci-app-samba4 + wsdd2）
+Extra packages->autocore
+Extra packages->automount
+Extra packages->autosamba
+Extra packages->ipv6helper
 
-## 插件
+
+# 插件
 LuCI ---> Applications ---> luci-app-autoreboot  #支持计划重启
+
+LuCI ---> Applications ---> luci-app-cpufreq   #CPU性能优化调节
 
 LuCI ---> Applications ---> luci-app-ddns   #动态域名 DNS
 
-LuCI ---> Applications ---> luci-app-ssr-plus #helloworld 代理（xray 24.12.31 / 1.8.24 可选，替代 homeproxy）
+LuCI ---> Applications ---> luci-app-ssr-plus #helloworld代理
 
-LuCI ---> Applications ---> luci-app-ttyd   #ttyd终端
+LuCI ---> Applications ---> luci-app-ttyd #ttyd终端
+
+LuCI ---> Applications ---> luci-app-turboacc #turboacc终端
 
 LuCI ---> Applications ---> luci-app-upnp   #通用即插即用UPnP（端口自动转发）
 
@@ -17,5 +25,5 @@ LuCI ---> Applications ---> luci-app-wechatpush   #微信推送的插件
 
 LuCI ---> Applications ---> luci-app-wol   #WOL网络唤醒
 
-## 插件增强
-Network ---> IP Addresses and Names ---> ddns-scripts-cloudflare
+# 插件增强
+Network ---> IP Addresses and Names ---> ddns-scripts_cloudflare

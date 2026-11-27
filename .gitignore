@@ -13,3 +13,6 @@ gen
 
 # 用户提供的原始 menuconfig 导出（仅本地参考，内容已固化进 config/base/）
 /config/.config
+
+# 用户提供的原始 menuconfig 导出（仅本地参考，内容已固化进 config/base/immortalwrt-21.02.config）
+/config/base/.config
