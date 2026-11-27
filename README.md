@@ -4,7 +4,12 @@
 
 源码：`immortalwrt/immortalwrt`，分支 **`openwrt-21.02`**（内核 5.4，LuCI 还是 Lua 版）。
 代理：**helloworld 的 `luci-app-ssr-plus` + `xray-core`**，替换掉 21.02 自带的 ssr-plus 187 / xray 1.8.3。
+
 xray 版本从下拉选：`24.12.31`（默认） / `1.8.24`。
+
+> 三个 `*-helloworld` 分支的 CI 都只 clone **上游**仓库：`immortalwrt/immortalwrt`、
+> `fw876/helloworld`、以及 `immortalwrt/packages`/`luci`、`openwrt/routing`/`telephony` 四个 feed。
+> 不使用任何个人 fork（`venpeng/immortalwrt` 上的 `openwrt-23.05-fix` 只供本地构建，CI 不引用）。
 
 ## 21.02 要额外解决的两件事
 
@@ -62,6 +67,23 @@ xray 版本从下拉选：`24.12.31`（默认） / `1.8.24`。
 >
 > 脚本还带一道版本断言：检出后比对 `xray-core/Makefile` 的 `PKG_VERSION` 与 `hw_version`，
 > 不一致立即失败，不会等编到几十分钟后才发现代理版本不对。
+
+### 为什么同一个 SHA 在 21.02 会挂、23.05 / 24.10 却能过
+
+`scripts/feeds` 对 `^commit` 的实现不同（都以 `src-git` 为例）：
+
+| | `init_commit` |
+| --- | --- |
+| 21.02 | `git clone '<url>' '<dir>' && git checkout -b '<sha>' '<sha>'` |
+| 23.05 / 24.10 | `git clone --depth 1 '<url>' '<dir>' && git fetch --depth=1 origin '<sha>' && git checkout '<sha>'` |
+
+`git clone` 只下载**各 ref 可达**的对象。上游 rebase 之后 `5eeaf1c` 成了悬空提交：
+21.02 的全量克隆里没有它，checkout 直接报 `unable to read tree`；
+23.05 / 24.10 多一句 `git fetch --depth=1 origin <sha>`，是按对象编号直接向服务器取，
+GitHub 只要还没 GC 就能给（`allowAnySHA1InWant`），所以那两个分支当时能过。
+
+**能过不等于正确**：悬空对象随时会被清理，上游一次 `git gc` 之后它们会以同样的方式挂。
+所以三个分支统一钉到 `1869e7f`（在 `master` 上可达），21.02 还额外自己做预拉取并断言版本。
 
 ## 与 23.05 / 24.10 分支的差异
 
