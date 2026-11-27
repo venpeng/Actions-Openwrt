@@ -104,6 +104,29 @@ else
   echo "额外插件   : 已按要求关闭"
 fi
 
+# ---- 4b) 独立开关（ipv6helper / turboacc）----
+# 这两项不在 extra-packages.config 里，由 workflow 下拉单独控制。
+# 选「启用」却不在 .config 里，直接硬失败 —— 功能悄悄消失比编不出来更糟。
+check_switch() {
+  local name="$1" sym="$2" want="$3"
+  if [ "$want" = "true" ]; then
+    if grep -qx "${sym}=y" .config; then
+      echo "独立开关   : ${name} 已启用 ✅"
+    else
+      echo "::error::${name} 选了启用，但 defconfig 后 ${sym} 不在 .config 里"
+      FAIL=1
+    fi
+  else
+    if grep -qx "${sym}=y" .config; then
+      echo "::warning::${name} 选了关闭，但 ${sym} 仍是 =y（被别的包依赖带进来？）"
+    else
+      echo "独立开关   : ${name} 已关闭 ✅"
+    fi
+  fi
+}
+check_switch ipv6helper CONFIG_PACKAGE_ipv6helper "${IPV6HELPER:-true}"
+check_switch turboacc   CONFIG_PACKAGE_luci-app-turboacc "${TURBOACC:-true}"
+
 # ---- 5) helloworld 来源与版本 ----
 # 21.02 自带 golang 1.19.13；post-feeds 换成 1.21.13 之后，
 # 本分支只提供 24.12.31 / 1.8.24 两档（25.1.1 要 go 1.23，已从下拉移除）。

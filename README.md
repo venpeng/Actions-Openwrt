@@ -47,14 +47,20 @@ xray 版本从下拉选：`24.12.31`（默认） / `1.8.24`。
 
 ## 怎么用
 
-`Actions` → `Build ImmortalWrt ACRH17 (21.02)` → `Run workflow`，四个输入：
+`Actions` → `Build ImmortalWrt ACRH17 (21.02)` → `Run workflow`，六个输入：
 
 | 输入 | 取值 | 说明 |
 | --- | --- | --- |
 | `lan_ip` | `1.1`（默认） / `11.1` / `all` | 网关地址。`11.1` = `192.168.11.1`；`all` = 两个各编一份（并行 job） |
 | `hw_version` | `24.12.31`（默认） / `1.8.24` | helloworld 版本。对应提交 `1869e7f` / `521e396` |
 | `extra_plugins` | `true`（默认） / `false` | 是否编译 `config/extra-packages.config` 里的插件 |
+| `ipv6helper` | `true`（默认） / `false` | 独立开关，编 `ipv6helper`（LAN 侧 IPv6 hybrid + 6in4 隧道更新） |
+| `turboacc` | `true`（默认） / `false` | 独立开关，编 `luci-app-turboacc` + `kmod-ipt-offload`（flow offloading 软加速） |
 | `upload_release` | `true` / `false` | `false` 只上传 Artifact，不发 Release |
+
+`ipv6helper` / `turboacc` **不受 `extra_plugins` 影响**：它们在 `extra-packages.config` 之外，
+由各自的下拉控制。关掉 `turboacc` 会连后端模块 `kmod-ipt-offload` 一起置为 not set，
+不会出现「app 关了、加速模块还编进固件」的浪费。
 
 版本映射写在 `diysh/acrh17/diy-part1.sh`，都是 **40 位全 SHA**，由脚本自己按提交号浅取
 （约 5 秒 / 3.3MB），不再走 `scripts/feeds` 的 `^commit`：

@@ -19,6 +19,9 @@
 #                   两个都要求 go >= 1.21.4，靠 post-feeds 的 1.21.13 满足
 #   extra_plugins   true = config/extra-packages.config 里的插件全部编进去
 #                   false = 那些插件全部置为 not set
+#   ipv6helper      true = 编 ipv6helper（LAN 侧 IPv6 hybrid + 6in4 隧道更新）
+#   turboacc        true = 编 luci-app-turboacc + kmod-ipt-offload（flow offloading）
+#                   这两项独立于 extra_plugins，单独控制
 #   upload_release  是否发 Release
 #
 # 配置结构：
@@ -63,6 +66,22 @@ on:
         options:
           - 'true'
           - 'false'
+      ipv6helper:
+        description: 'IPv6 助手（LAN 侧 IPv6 hybrid + 6in4 隧道更新）'
+        required: true
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+      turboacc:
+        description: '软加速 luci-app-turboacc（flow offloading）'
+        required: true
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
       upload_release:
         description: '固件发布到 Release（false 则只上传 Artifact）'
         required: true
@@ -83,6 +102,9 @@ env:
   UPLOAD_BIN_DIR: false
   UPLOAD_FIRMWARE: true
   EXTRA_PLUGINS: ${{ inputs.extra_plugins || 'true' }}
+  # 两个独立开关，gen-config.sh / verify-config.sh 直接读这两个变量
+  IPV6HELPER: ${{ inputs.ipv6helper || 'true' }}
+  TURBOACC: ${{ inputs.turboacc || 'true' }}
   # helloworld 版本 → 具体提交的映射在 diy-part1.sh 里，这里只传版本号
   HW_VERSION: ${{ inputs.hw_version || '24.12.31' }}
   UPLOAD_RELEASE: ${{ inputs.upload_release || 'true' }}
@@ -259,6 +281,8 @@ jobs:
             echo "Go 工具链 : $(grep -hE '^GO_VERSION_(MAJOR_MINOR|PATCH):=' "$GITHUB_WORKSPACE/openwrt/feeds/packages/lang/golang/golang/Makefile" | sed 's/.*:=//' | tr '\n' '.' | sed 's/\.$//')（post-feeds 覆盖）"
             echo "LAN 网段  : 192.168.${LAN_IP}"
             echo "额外插件  : ${EXTRA_PLUGINS}"
+            echo "IPv6 助手 : ${IPV6HELPER}"
+            echo "软加速    : ${TURBOACC}（含 kmod-ipt-offload）"
             echo "构建时间  : $(TZ=Asia/Shanghai date '+%Y-%m-%d %H:%M:%S')"
             echo "内核      : $(grep -m1 '^CONFIG_LINUX_' "$GITHUB_WORKSPACE/openwrt/.config" | sed 's/^CONFIG_LINUX_//; s/=y$//; s/_/./g')"
             echo "配置文件  : ${CFG_NAME}（= 本次实际使用的 .config）"

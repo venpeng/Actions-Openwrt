@@ -5,9 +5,11 @@
 #   基础配置（config/base/immortalwrt-21.02.config）
 #     + 机型符号（asus_rt-ac42u）
 #     + 额外插件开关（config/extra-packages.config）
+#     + 独立开关 IPV6HELPER / TURBOACC（环境变量，默认 true）
 #
 # 用法:
-#   gen-config.sh <openwrt目录> <基础配置> <true|false>
+#   [IPV6HELPER=true] [TURBOACC=true] \
+#     gen-config.sh <openwrt目录> <基础配置> <true|false>
 #
 # 设计要点:
 #   1) 基础配置里不留 CONFIG_TARGET_*_DEVICE_* / CONFIG_TARGET_PROFILE /
@@ -138,6 +140,28 @@ else
   apply_list "$EXTRA_FILE" off
   echo "✅ 额外插件: 关闭（清单 $(grep -cE '^CONFIG_' "$EXTRA_FILE") 项全部置为 not set）"
 fi
+
+# ---------------------------------------------------------------
+# 4) 独立开关（workflow 下拉，与 extra_plugins 无关）
+#    ipv6helper / turboacc 不放进清单：清单是「一开全开」，
+#    这两项需要单独控制；turboacc 连后端模块 kmod-ipt-offload 一起。
+#    base 里 kmod-ipt-offload 写死为 y，所以关 turboacc 时必须显式覆盖。
+# ---------------------------------------------------------------
+apply_switch() {
+  local sym="$1" flag="$2"
+  if [ "$flag" = "true" ]; then
+    set_config "$sym" y
+  else
+    set_config "$sym" n
+  fi
+}
+
+IPV6HELPER="${IPV6HELPER:-true}"
+TURBOACC="${TURBOACC:-true}"
+apply_switch CONFIG_PACKAGE_ipv6helper       "$IPV6HELPER"
+apply_switch CONFIG_PACKAGE_luci-app-turboacc "$TURBOACC"
+apply_switch CONFIG_PACKAGE_kmod-ipt-offload  "$TURBOACC"
+echo "✅ 独立开关: ipv6helper=${IPV6HELPER}  turboacc=${TURBOACC}（含 kmod-ipt-offload）"
 
 echo "----------------------------------------"
 echo "机型符号 : $(grep -c "^CONFIG_TARGET_${CONF}_DEVICE_" .config) 个（应为 1）"
