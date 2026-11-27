@@ -6,6 +6,10 @@
 代理内核：**helloworld（`luci-app-ssr-plus` + `xray-core`）**，替代原来的 homeproxy。
 xray 版本从下拉选：`24.12.31`（默认）或 `1.8.24`。
 
+> 三个 `*-helloworld` 分支的 CI 都只 clone **上游**仓库：`immortalwrt/immortalwrt`、
+> `fw876/helloworld`、以及 `immortalwrt/packages`/`luci`、`openwrt/routing`/`telephony` 四个 feed。
+> 不使用任何个人 fork（`venpeng/immortalwrt` 上的 `openwrt-23.05-fix` 只供本地构建，CI 不引用）。
+
 从 `acrh17-24.10-helloworld` 切出来的姊妹分支，差别只有两处：源码分支换成 23.05，
 以及 xray 上限降到 24.12.31（23.05 的 Go 只有 1.21.13）。插件清单、机型、脚本逻辑完全一致。
 
