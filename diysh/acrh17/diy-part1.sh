@@ -16,7 +16,7 @@
 #   1.8.24       521e396            1.8.24       go 1.21.4 2024-10-14
 #
 #   21.02 自带 golang 1.19.13，两个版本都编不过 —— post-feeds.sh 会把
-#   feeds/packages/lang/golang 换成 1.23.12（来自 immortalwrt/packages@24.10）。
+#   feeds/packages/lang/golang 换成 1.21.13（来自 immortalwrt/packages@23.05）。
 #   25.1.1 及以上不在本分支提供（25.1.1 要 go 1.23、25.3.31+ 要 go 1.24）。
 #
 # 两个提交都是「该 xray 版本的最后状态」：

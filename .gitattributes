@@ -9,3 +9,6 @@
 *.patch  text eol=lf
 *.mk     text eol=lf
 Makefile text eol=lf
+patches/**/Config.in   text eol=lf
+patches/**/go-gcc-helper text eol=lf
+patches/**/test.sh     text eol=lf

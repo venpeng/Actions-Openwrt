@@ -14,17 +14,18 @@ xray 版本从下拉选：`24.12.31`（默认） / `1.8.24`。
 
 21.02 的 `packages` feed 里 golang 是 **1.19.13**，而：
 
-| xray | go.mod 要求 | 1.19.13 | 1.23.12（本分支） |
+| xray | go.mod 要求 | 1.19.13 | 1.21.13（本分支） |
 | --- | --- | --- | --- |
 | `1.8.24` | `go 1.21.4` | ❌ | ✅ |
 | `24.12.31` | `go 1.21.4` | ❌ | ✅ |
 | `25.1.1` 以后 | `go 1.23` | ❌ | 本分支不提供 |
 
-所以仓库里带了一份 `patches/golang-1.23.12/`（取自 `immortalwrt/packages@openwrt-24.10`，
+所以仓库里带了一份 `patches/golang-1.21.13/`（取自 `immortalwrt/packages@openwrt-23.05`，
 5 个 `*.mk` + 整个 `golang/` 子目录，跨分支结构通用），构建时覆盖进 `feeds/packages/lang/golang/`。
-`golang/patches/` 必须一起清掉 —— 21.02 里面那条给 Go 1.19 的 lib.go 补丁打到 1.23.12 上会 Hunk FAILED。
+`golang/patches/` 必须一起清掉 —— 21.02 里面那条给 Go 1.19 的 lib.go 补丁打到 1.21 上会 Hunk FAILED。
 
-引导链是 `go1.4 → go1.17.13 → go1.20.14 → go1.23.12`，主机编译大约多花 20 分钟。
+引导链是 `go1.4 → go1.17.13 → go1.21.13`（三级），主机编译大约多花 12 分钟。
+选 1.21.13 而不是 1.23.12：xray 上限已收到 24.12.31（只要 go 1.21.4），少一级引导就少等 8~10 分钟。
 
 **② 内置代理包与 helloworld 同名**
 
@@ -61,7 +62,7 @@ xray 版本从下拉选：`24.12.31`（默认） / `1.8.24`。
 | --- | --- | --- | --- |
 | 内核 | 5.4 | 5.15 | 6.6 |
 | LuCI | Lua（原生支持 helloworld） | JS + `luci-compat` | JS + `luci-compat` |
-| 默认 Go | 1.19.13 → 脚本换 1.23.12 | 1.21.13 | 1.23.12 |
+| 默认 Go | 1.19.13 → 脚本换 1.21.13 | 1.21.13 | 1.23.12 |
 | 防火墙 | firewall3 + iptables | firewall4 + nftables | firewall4 + nftables |
 | UPnP | `miniupnpd` | `miniupnpd-nftables` | `miniupnpd-nftables` |
 | xray 上限 | 24.12.31 | 24.12.31 | 25.1.1 |

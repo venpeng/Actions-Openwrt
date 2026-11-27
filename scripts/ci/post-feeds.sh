@@ -7,10 +7,12 @@
 #   1. golang 太老：21.02 的 packages feed 是 1.19.13，
 #      xray 1.8.24 / 24.12.31 都要 go 1.21.4 —— 直接编必然报
 #      "go.mod requires go >= 1.21.4"。
-#      这里把 immortalwrt/packages@openwrt-24.10 的 golang 1.23.12 整体覆盖进
+#      这里把 immortalwrt/packages@openwrt-23.05 的 golang 1.21.13 整体覆盖进
 #      feeds/packages/lang/golang（5 个 *.mk + golang/ 子目录）。
+#      选 1.21.13 而不是 1.23.12：xray 上限已收到 24.12.31（只要 go 1.21.4），
+#      引导链少一级 go1.20.14，主机侧省 8~10 分钟。
 #      golang/ 必须整目录替换：21.02 的 golang/patches/ 里有一条给 Go 1.19
-#      准备的 lib.go 补丁，打到 1.23.12 上会 Hunk FAILED。
+#      准备的 lib.go 补丁，打到 1.21 上会 Hunk FAILED。
 #
 #   2. 内置代理包与 helloworld 同名：21.02 自带
 #        luci feed  → luci-app-ssr-plus  187（配 xray 1.8.3）
@@ -26,13 +28,13 @@ set -euo pipefail
 
 OW="${1:-.}"
 REPO_ROOT="${GITHUB_WORKSPACE:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
-GO_SRC="$REPO_ROOT/patches/golang-1.23.12"
+GO_SRC="$REPO_ROOT/patches/golang-1.21.13"
 GO_DST="feeds/packages/lang/golang"
 
 cd "$OW"
 
 # ---------------------------------------------------------------
-# 1) golang 1.19.13 → 1.23.12
+# 1) golang 1.19.13 → 1.21.13
 # ---------------------------------------------------------------
 echo "== 1) 替换 golang =="
 [ -d "$GO_DST" ] || { echo "::error::找不到 $GO_DST，feeds 没更新？"; exit 1; }
@@ -41,19 +43,19 @@ for f in golang-build.sh golang-compiler.mk golang-host-build.mk golang-package.
   cp -f "$GO_SRC/$f" "$GO_DST/$f"
 done
 # golang/ 整个子目录一起换：21.02 的 golang/patches/001-cmd-link-... 是给 Go 1.19 的，
-# 套到 1.23.12 会卡在 src/cmd/link/internal/ld/lib.go（Hunk #1 FAILED at 1515）；
-# 24.10 没有 patches/，但多了 files/go-gcc-helper（Makefile 里装成交叉 gcc 包装）
+# 套到 1.21 上会卡在 src/cmd/link/internal/ld/lib.go（Hunk #1 FAILED）；
+# 23.05 的 golang/ 没有 patches/，自带 files/go-gcc-helper（交叉 gcc 包装）
 [ -f "$GO_SRC/golang/Makefile" ] || { echo "::error::缺 $GO_SRC/golang/Makefile"; exit 1; }
 rm -rf "$GO_DST/golang"
 cp -a "$GO_SRC/golang" "$GO_DST/golang"
 if [ -d "$GO_DST/golang/patches" ] && [ -n "$(ls -A "$GO_DST/golang/patches" 2>/dev/null)" ]; then
-  echo "::error::golang/patches 没清干净，Go 1.23 会被旧补丁打挂"
+  echo "::error::golang/patches 没清干净，Go 1.21 会被旧补丁打挂"
   exit 1
 fi
 
 GO_MAJOR=$(grep -m1 '^GO_VERSION_MAJOR_MINOR:=' "$GO_DST/golang/Makefile" | sed 's/.*:=//')
 GO_PATCH=$(grep -m1 '^GO_VERSION_PATCH:=' "$GO_DST/golang/Makefile" | sed 's/.*:=//')
-echo "   golang: ${GO_MAJOR}.${GO_PATCH}（21.02 原本是 1.19.13）"
+echo "   golang: ${GO_MAJOR}.${GO_PATCH}（21.02 原本是 1.19.13，引导链 1.4 → 1.17.13 → ${GO_MAJOR}.${GO_PATCH}）"
 case "$GO_MAJOR" in
   1.2[1-9]|1.[3-9][0-9]) ;;
   *) echo "::error::golang ${GO_MAJOR} 低于 1.21，xray 编不过"; exit 1 ;;

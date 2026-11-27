@@ -69,7 +69,7 @@ if [ -n "$SSRP_LINK" ] && readlink -f "$SSRP_LINK" | grep -q '/feeds/helloworld/
 else
   echo "::warning::luci-app-ssr-plus 不是来自 helloworld —— post-feeds.sh 没生效？"
 fi
-# 21.02 自带 golang 1.19.13，编不了 xray >=1.8.24；post-feeds 应已换成 1.23.12
+# 21.02 自带 golang 1.19.13，编不了 xray >=1.8.24；post-feeds 应已换成 1.21.13
 GO_MK=feeds/packages/lang/golang/golang/Makefile
 if [ -f "$GO_MK" ]; then
   GO_V=$(grep -m1 '^GO_VERSION_MAJOR_MINOR:=' "$GO_MK" | sed 's/.*:=//')
@@ -105,7 +105,7 @@ else
 fi
 
 # ---- 5) helloworld 来源与版本 ----
-# 21.02 自带 golang 1.19.13；post-feeds 换成 1.23.12 之后，
+# 21.02 自带 golang 1.19.13；post-feeds 换成 1.21.13 之后，
 # 本分支只提供 24.12.31 / 1.8.24 两档（25.1.1 要 go 1.23，已从下拉移除）。
 # pin 被改错时唯一的表现就是编译期一句 "go.mod requires go >= 1.xx"。
 EXPECT_HW="${HW_VERSION:-24.12.31}"

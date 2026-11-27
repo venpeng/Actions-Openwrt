@@ -6,7 +6,7 @@
 #
 # 与其他 helloworld 分支的差异：
 #   1. 21.02 自带 golang 1.19.13，编不了 xray >= 1.8.24 —— 由
-#      scripts/ci/post-feeds.sh 把 feeds/packages/lang/golang 换成 1.23.12
+#      scripts/ci/post-feeds.sh 把 feeds/packages/lang/golang 换成 1.21.13
 #   2. 21.02 自带 luci-app-ssr-plus(187) + xray-core(1.8.3)，与 helloworld
 #      包名冲突 —— 同一脚本摘掉内置 symlink，强制从 helloworld 重装
 #   3. 用 firewall3/iptables：UPnP 只有 miniupnpd，没有 -nftables 变体
@@ -16,7 +16,7 @@
 #   hw_version      helloworld 版本（决定 xray 内核）
 #                   24.12.31 = 5eeaf1c（2025-01-10，默认）
 #                   1.8.24   = 521e396（2024-10-14）
-#                   两个都要求 go >= 1.21，靠 post-feeds 的 1.23.12 满足
+#                   两个都要求 go >= 1.21.4，靠 post-feeds 的 1.21.13 满足
 #   extra_plugins   true = config/extra-packages.config 里的插件全部编进去
 #                   false = 那些插件全部置为 not set
 #   upload_release  是否发 Release
@@ -165,7 +165,7 @@ jobs:
 
       # ---------------------------------------------------------------
       # 21.02 专属：feeds 装完之后的两处替换
-      #   1) golang 1.19.13 → 1.23.12（xray 1.8.24 起就要 go 1.21）
+      #   1) golang 1.19.13 → 1.21.13（xray 1.8.24 起就要 go 1.21.4）
       #   2) 用 helloworld 覆盖内置 luci-app-ssr-plus(187) / xray-core(1.8.3)
       # 必须在 defconfig 之前完成：gen-config 写的符号要靠它解析到正确版本
       # ---------------------------------------------------------------
