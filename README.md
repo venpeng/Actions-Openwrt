@@ -6,6 +6,10 @@
 代理内核：**helloworld（`luci-app-ssr-plus` + `xray-core`）**，取代原来的 homeproxy。
 xray 版本从下拉选：`25.1.1`（默认）或 `24.12.31`。
 
+> 三个 `*-helloworld` 分支的 CI 都只 clone **上游**仓库：`immortalwrt/immortalwrt`、
+> `fw876/helloworld`、以及 `immortalwrt/packages`/`luci`、`openwrt/routing`/`telephony` 四个 feed。
+> 不使用任何个人 fork（`venpeng/immortalwrt` 上的 `openwrt-23.05-fix` 只供本地构建，CI 不引用）。
+
 从 `acrh17` 分支切出来的，唯一区别就是代理内核：ACRH17 只有 256MB 内存，跑 sing-box 吃力，
 换成 xray 后常驻内存明显下降。为什么只有这两个版本可选，见下面「为什么只能选这两个版本」。
 
