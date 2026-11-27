@@ -153,6 +153,11 @@ jobs:
             echo "::error::feeds/helloworld 不存在 —— diy-part1.sh 的 feed 没加上？"
             exit 1
           fi
+          HW_HEAD=$(git -C feeds/helloworld rev-parse HEAD)
+          if [ "$HW_HEAD" != "$HW_COMMIT" ]; then
+            echo "::error::helloworld 的 HEAD 是 ${HW_HEAD}，不是预期的 ${HW_COMMIT}"
+            exit 1
+          fi
           XRAY_VER=$(grep -m1 '^PKG_VERSION:=' feeds/helloworld/xray-core/Makefile | sed 's/.*:=//')
           echo "helloworld xray-core: ${XRAY_VER}（期望 ${HW_VERSION}）"
           echo "helloworld 提交: $(git -C feeds/helloworld log -1 --date=short --format='%h %ad %s')"
