@@ -14,7 +14,7 @@
 # 下拉：
 #   lan_ip          1.1 = 192.168.1.1（默认） / 11.1 / all（两个并行 job）
 #   hw_version      helloworld 版本（决定 xray 内核）
-#                   24.12.31 = 5eeaf1c（2025-01-10，默认）
+#                   24.12.31 = 1869e7f（2025-01-05，默认）
 #                   1.8.24   = 521e396（2024-10-14）
 #                   两个都要求 go >= 1.21.4，靠 post-feeds 的 1.21.13 满足
 #   extra_plugins   true = config/extra-packages.config 里的插件全部编进去

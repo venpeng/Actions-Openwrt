@@ -47,14 +47,21 @@ xray 版本从下拉选：`24.12.31`（默认） / `1.8.24`。
 | 输入 | 取值 | 说明 |
 | --- | --- | --- |
 | `lan_ip` | `1.1`（默认） / `11.1` / `all` | 网关地址。`11.1` = `192.168.11.1`；`all` = 两个各编一份（并行 job） |
-| `hw_version` | `24.12.31`（默认） / `1.8.24` | helloworld 版本。对应提交 `5eeaf1c` / `521e396` |
+| `hw_version` | `24.12.31`（默认） / `1.8.24` | helloworld 版本。对应提交 `1869e7f` / `521e396` |
 | `extra_plugins` | `true`（默认） / `false` | 是否编译 `config/extra-packages.config` 里的插件 |
 | `upload_release` | `true` / `false` | `false` 只上传 Artifact，不发 Release |
 
-版本映射写在 `diysh/acrh17/diy-part1.sh`，都是 **40 位全 SHA**：
+版本映射写在 `diysh/acrh17/diy-part1.sh`，都是 **40 位全 SHA**，由脚本自己按提交号浅取
+（约 5 秒 / 3.3MB），不再走 `scripts/feeds` 的 `^commit`：
 
-> ⚠ 短 SHA 会被 `scripts/feeds` 的 `git fetch --depth=1 origin xxx` 当成 ref 名，
-> 直接报 `couldn't find remote ref`，clone 退回 master（xray 26.x），编译期才炸。
+> ⚠ 短 SHA 会被 git 当 ref 名，直接报 `couldn't find remote ref`；
+> 更隐蔽的是**上游 rebase / force-push 会把旧提交从远端丢弃**——之前钉的 `5eeaf1c`
+> （本地旧克隆里 `R24.12.31` 的 tip）就是这样：`git clone` 拿不到它，CI 只给一句
+> `fatal: unable to read tree (5eeaf1c...)`。换版本前先确认提交可达
+> （本地 clone 后 `git cat-file -e <sha>^{commit}` 能过）。
+>
+> 脚本还带一道版本断言：检出后比对 `xray-core/Makefile` 的 `PKG_VERSION` 与 `hw_version`，
+> 不一致立即失败，不会等编到几十分钟后才发现代理版本不对。
 
 ## 与 23.05 / 24.10 分支的差异
 
