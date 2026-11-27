@@ -7,8 +7,10 @@
 #   1. golang 太老：21.02 的 packages feed 是 1.19.13，
 #      xray 1.8.24 就要 go 1.21.4，25.1.1 要 go 1.23 —— 直接编必然报
 #      "go.mod requires go >= 1.21.4"。
-#      这里把 immortalwrt/packages@openwrt-24.10 的 golang 1.23.12
-#      （六个打包脚本，结构跨版本通用）覆盖进 feeds/packages/lang/golang。
+#      这里把 immortalwrt/packages@openwrt-24.10 的 golang 1.23.12 整体覆盖进
+#      feeds/packages/lang/golang（5 个 *.mk + golang/ 子目录）。
+#      golang/ 必须整目录替换：21.02 的 golang/patches/ 里有一条给 Go 1.19
+#      准备的 lib.go 补丁，打到 1.23.12 上会 Hunk FAILED。
 #
 #   2. 内置代理包与 helloworld 同名：21.02 自带
 #        luci feed  → luci-app-ssr-plus  187（配 xray 1.8.3）
@@ -38,8 +40,16 @@ for f in golang-build.sh golang-compiler.mk golang-host-build.mk golang-package.
   [ -f "$GO_SRC/$f" ] || { echo "::error::缺 $GO_SRC/$f"; exit 1; }
   cp -f "$GO_SRC/$f" "$GO_DST/$f"
 done
-mkdir -p "$GO_DST/golang"
-cp -f "$GO_SRC/golang/Makefile" "$GO_DST/golang/Makefile"
+# golang/ 整个子目录一起换：21.02 的 golang/patches/001-cmd-link-... 是给 Go 1.19 的，
+# 套到 1.23.12 会卡在 src/cmd/link/internal/ld/lib.go（Hunk #1 FAILED at 1515）；
+# 24.10 没有 patches/，但多了 files/go-gcc-helper（Makefile 里装成交叉 gcc 包装）
+[ -f "$GO_SRC/golang/Makefile" ] || { echo "::error::缺 $GO_SRC/golang/Makefile"; exit 1; }
+rm -rf "$GO_DST/golang"
+cp -a "$GO_SRC/golang" "$GO_DST/golang"
+if [ -d "$GO_DST/golang/patches" ] && [ -n "$(ls -A "$GO_DST/golang/patches" 2>/dev/null)" ]; then
+  echo "::error::golang/patches 没清干净，Go 1.23 会被旧补丁打挂"
+  exit 1
+fi
 
 GO_MAJOR=$(grep -m1 '^GO_VERSION_MAJOR_MINOR:=' "$GO_DST/golang/Makefile" | sed 's/.*:=//')
 GO_PATCH=$(grep -m1 '^GO_VERSION_PATCH:=' "$GO_DST/golang/Makefile" | sed 's/.*:=//')
