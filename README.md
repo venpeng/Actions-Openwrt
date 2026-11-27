@@ -108,6 +108,30 @@ bash scripts/ci/gen-config.sh /tmp/ow config/base/immortalwrt-21.02.config true
 bash scripts/ci/verify-config.sh /tmp/ow true     # 没有 feeds 时会有两条 warning，属正常
 ```
 
+## 参考配置：和你的 menuconfig 对比
+
+`config/reference/menuconfig-21.02.config` 是本地 `make menuconfig` 的原始导出
+（7274 行、337 个 `=y` 包），只作对照，CI 不读它。实际参与构建的是
+`config/base/immortalwrt-21.02.config`（剥掉了机型/插件/ssr-plus 符号）。
+
+编译完成后，从产物里取出 `config-immortalwrt-21.02-<LAN_IP>-<日期>.config`，两种比法：
+
+```bash
+# 只看「装了哪些包」
+diff <(grep -E '^CONFIG_PACKAGE_.*=y$' config/reference/menuconfig-21.02.config | sort) \
+     <(grep -E '^CONFIG_PACKAGE_.*=y$' config-immortalwrt-21.02-1.1-20261127.config | sort)
+
+# 看全部差异（默认项会很多）
+diff -u config/reference/menuconfig-21.02.config config-immortalwrt-21.02-1.1-20261127.config | less
+```
+
+预期的差异来源：
+
+- 产物里的 `.config` 是 `make defconfig` 之后的状态，会多出几百行默认项（`DEFAULT_PACKAGES` 展开的结果）
+- `CONFIG_TARGET_*_DEVICE_*`、`CONFIG_TARGET_PROFILE`、`CONFIG_MULTI_PROFILE` 是 `gen-config.sh` 追加的
+- base 里剥掉的 `CONFIG_DEFAULT_*` 会重新出现
+- `luci-app-ssr-plus*` / `xray-core` 来自 helloworld feed（你那份菜单里还是 21.02 自带的 187 / 1.8.3）
+
 ## 产物
 
 Artifact：`OpenWrt_firmware_<机型>_<日期时间>_<LAN_IP>`，同时发 Release。
