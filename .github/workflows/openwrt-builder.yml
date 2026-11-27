@@ -14,10 +14,9 @@
 # 下拉：
 #   lan_ip          1.1 = 192.168.1.1（默认） / 11.1 / all（两个并行 job）
 #   hw_version      helloworld 版本（决定 xray 内核）
-#                   25.1.1   = f92f566（2025-03-30，默认）
-#                   24.12.31 = 5eeaf1c（2025-01-10）
+#                   24.12.31 = 5eeaf1c（2025-01-10，默认）
 #                   1.8.24   = 521e396（2024-10-14）
-#                   三个都要求 go >= 1.21，靠 post-feeds 的 1.23.12 满足
+#                   两个都要求 go >= 1.21，靠 post-feeds 的 1.23.12 满足
 #   extra_plugins   true = config/extra-packages.config 里的插件全部编进去
 #                   false = 那些插件全部置为 not set
 #   upload_release  是否发 Release
@@ -49,12 +48,11 @@ on:
           - '11.1'
           - all
       hw_version:
-        description: 'helloworld 版本（xray 内核）：25.1.1 = 2025-03-30 版（推荐）；24.12.31 = 2025-01-10；1.8.24 = 2024-10-14'
+        description: 'helloworld 版本（xray 内核）：24.12.31 = 2025-01-10 版（推荐）；1.8.24 = 2024-10-14 版'
         required: true
-        default: '25.1.1'
+        default: '24.12.31'
         type: choice
         options:
-          - '25.1.1'
           - '24.12.31'
           - '1.8.24'
       extra_plugins:
@@ -86,7 +84,7 @@ env:
   UPLOAD_FIRMWARE: true
   EXTRA_PLUGINS: ${{ inputs.extra_plugins || 'true' }}
   # helloworld 版本 → 具体提交的映射在 diy-part1.sh 里，这里只传版本号
-  HW_VERSION: ${{ inputs.hw_version || '25.1.1' }}
+  HW_VERSION: ${{ inputs.hw_version || '24.12.31' }}
   UPLOAD_RELEASE: ${{ inputs.upload_release || 'true' }}
   TZ: Asia/Shanghai
   # LAN_IP 不在这里：它由下面 jobs.build.strategy.matrix 展开，见 jobs.build.env

@@ -5,7 +5,7 @@
 # 21.02 这个分支上有两个「必须先处理掉」的坑：
 #
 #   1. golang 太老：21.02 的 packages feed 是 1.19.13，
-#      xray 1.8.24 就要 go 1.21.4，25.1.1 要 go 1.23 —— 直接编必然报
+#      xray 1.8.24 / 24.12.31 都要 go 1.21.4 —— 直接编必然报
 #      "go.mod requires go >= 1.21.4"。
 #      这里把 immortalwrt/packages@openwrt-24.10 的 golang 1.23.12 整体覆盖进
 #      feeds/packages/lang/golang（5 个 *.mk + golang/ 子目录）。

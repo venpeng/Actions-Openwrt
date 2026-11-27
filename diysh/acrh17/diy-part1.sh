@@ -12,16 +12,14 @@
 # 版本与 Go 要求：
 #
 #   HW_VERSION   helloworld 提交    xray         Go 要求   日期
-#   25.1.1       f92f566            25.1.1       go 1.23   2025-03-30（默认）
-#   24.12.31     5eeaf1c            24.12.31     go 1.21.4 2025-01-10
+#   24.12.31     5eeaf1c            24.12.31     go 1.21.4 2025-01-10（默认）
 #   1.8.24       521e396            1.8.24       go 1.21.4 2024-10-14
 #
-#   21.02 自带 golang 1.19.13，三个版本都编不过 —— post-feeds.sh 会把
-#   feeds/packages/lang/golang 换成 1.23.12（来自 immortalwrt/packages@24.10），
-#   所以上面三个都能编。再高（25.3.31+）要 go 1.24，1.23 不够。
+#   21.02 自带 golang 1.19.13，两个版本都编不过 —— post-feeds.sh 会把
+#   feeds/packages/lang/golang 换成 1.23.12（来自 immortalwrt/packages@24.10）。
+#   25.1.1 及以上不在本分支提供（25.1.1 要 go 1.23、25.3.31+ 要 go 1.24）。
 #
-# 三个提交都是「该 xray 版本的最后状态」：
-#   f92f566 是 helloworld 把 xray 升到 25.3.31 之前的最后一个提交
+# 两个提交都是「该 xray 版本的最后状态」：
 #   5eeaf1c 是 helloworld 把 xray 升到 25.1.1 之前的最后一个提交
 #   521e396 是 helloworld 把 xray 升到 24.10.16 之前的最后一个提交
 #   （比各自的升版提交多带一个月的 ssr-plus 修复，xray 包本身没变）
@@ -29,7 +27,6 @@
 # 差别提醒：
 #   - 1.8.24 配套 ssr-plus 188，订阅解析不支持 hy2://（只能手动填 hysteria2）
 #   - 24.12.31 配套 189，支持 hy2:// 订阅
-#   - 25.1.1 配套 189，再多两个月的订阅修复
 #
 # ⚠ SHA 必须写满 40 位，不能写短 SHA：
 #   scripts/feeds 对 ^xxx 的处理是 `git fetch --depth=1 origin xxx`，
@@ -41,18 +38,16 @@
 
 set -euo pipefail
 
-HW_VERSION="${HW_VERSION:-25.1.1}"
+HW_VERSION="${HW_VERSION:-24.12.31}"
 HELLOWORLD_URL="https://github.com/fw876/helloworld.git"
 
 case "$HW_VERSION" in
-  25.1.1)
-    HW_COMMIT="f92f56614c059d63941e04f37f18aea18e001868" ;;   # 2025-03-30，xray 25.1.1
   24.12.31)
     HW_COMMIT="5eeaf1cd1ff120b1d41674d263ff5b69c85b3ace" ;;   # 2025-01-10，xray 24.12.31
   1.8.24)
     HW_COMMIT="521e396be6c482e4638a6fadd0a34ba3e86a94b3" ;;   # 2024-10-14，xray 1.8.24
   *)
-    echo "::error::未知 HW_VERSION='${HW_VERSION}'，只支持 25.1.1 / 24.12.31 / 1.8.24"
+    echo "::error::未知 HW_VERSION='${HW_VERSION}'，只支持 24.12.31 / 1.8.24"
     exit 1 ;;
 esac
 

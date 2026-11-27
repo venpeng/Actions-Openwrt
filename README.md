@@ -4,7 +4,7 @@
 
 源码：`immortalwrt/immortalwrt`，分支 **`openwrt-21.02`**（内核 5.4，LuCI 还是 Lua 版）。
 代理：**helloworld 的 `luci-app-ssr-plus` + `xray-core`**，替换掉 21.02 自带的 ssr-plus 187 / xray 1.8.3。
-xray 版本从下拉选：`25.1.1`（默认） / `24.12.31` / `1.8.24`。
+xray 版本从下拉选：`24.12.31`（默认） / `1.8.24`。
 
 ## 21.02 要额外解决的两件事
 
@@ -18,11 +18,11 @@ xray 版本从下拉选：`25.1.1`（默认） / `24.12.31` / `1.8.24`。
 | --- | --- | --- | --- |
 | `1.8.24` | `go 1.21.4` | ❌ | ✅ |
 | `24.12.31` | `go 1.21.4` | ❌ | ✅ |
-| `25.1.1` | `go 1.23` | ❌ | ✅ |
-| `25.3.31` 以后 | `go 1.24` | ❌ | ❌ |
+| `25.1.1` 以后 | `go 1.23` | ❌ | 本分支不提供 |
 
 所以仓库里带了一份 `patches/golang-1.23.12/`（取自 `immortalwrt/packages@openwrt-24.10`，
-六个打包脚本，跨分支结构通用），构建时覆盖进 `feeds/packages/lang/golang/`。
+5 个 `*.mk` + 整个 `golang/` 子目录，跨分支结构通用），构建时覆盖进 `feeds/packages/lang/golang/`。
+`golang/patches/` 必须一起清掉 —— 21.02 里面那条给 Go 1.19 的 lib.go 补丁打到 1.23.12 上会 Hunk FAILED。
 
 引导链是 `go1.4 → go1.17.13 → go1.20.14 → go1.23.12`，主机编译大约多花 20 分钟。
 
@@ -46,7 +46,7 @@ xray 版本从下拉选：`25.1.1`（默认） / `24.12.31` / `1.8.24`。
 | 输入 | 取值 | 说明 |
 | --- | --- | --- |
 | `lan_ip` | `1.1`（默认） / `11.1` / `all` | 网关地址。`11.1` = `192.168.11.1`；`all` = 两个各编一份（并行 job） |
-| `hw_version` | `25.1.1`（默认） / `24.12.31` / `1.8.24` | helloworld 版本。对应提交 `f92f566` / `5eeaf1c` / `521e396` |
+| `hw_version` | `24.12.31`（默认） / `1.8.24` | helloworld 版本。对应提交 `5eeaf1c` / `521e396` |
 | `extra_plugins` | `true`（默认） / `false` | 是否编译 `config/extra-packages.config` 里的插件 |
 | `upload_release` | `true` / `false` | `false` 只上传 Artifact，不发 Release |
 
@@ -64,7 +64,7 @@ xray 版本从下拉选：`25.1.1`（默认） / `24.12.31` / `1.8.24`。
 | 默认 Go | 1.19.13 → 脚本换 1.23.12 | 1.21.13 | 1.23.12 |
 | 防火墙 | firewall3 + iptables | firewall4 + nftables | firewall4 + nftables |
 | UPnP | `miniupnpd` | `miniupnpd-nftables` | `miniupnpd-nftables` |
-| xray 上限 | 25.1.1 | 24.12.31 | 25.1.1 |
+| xray 上限 | 24.12.31 | 24.12.31 | 25.1.1 |
 | 内置代理冲突 | **有**（ssr-plus 187 / xray 1.8.3） | 无 | 无 |
 
 ## 配置怎么组织

@@ -106,17 +106,17 @@ fi
 
 # ---- 5) helloworld 来源与版本 ----
 # 21.02 自带 golang 1.19.13；post-feeds 换成 1.23.12 之后，
-# 能编到 xray 25.1.1（25.3.31+ 要 go 1.24，编不了）。
+# 本分支只提供 24.12.31 / 1.8.24 两档（25.1.1 要 go 1.23，已从下拉移除）。
 # pin 被改错时唯一的表现就是编译期一句 "go.mod requires go >= 1.xx"。
-EXPECT_HW="${HW_VERSION:-25.1.1}"
+EXPECT_HW="${HW_VERSION:-24.12.31}"
 if [ -d feeds/helloworld ]; then
   HV=$(grep -m1 '^PKG_VERSION:=' feeds/helloworld/xray-core/Makefile 2>/dev/null | sed 's/.*:=//')
   HC=$(git -C feeds/helloworld rev-parse --short HEAD 2>/dev/null || echo '?')
   echo "helloworld : xray-core ${HV:-?}（提交 ${HC}，期望 ${EXPECT_HW}）"
   case "${HV:-}" in
-    25.1.1|24.12.31|1.8.24) ;;
+    24.12.31|1.8.24) ;;
     *)
-      echo "::warning::xray-core 是 ${HV:-未知}，不在本分支的可编范围内（25.1.1 / 24.12.31 / 1.8.24）——"
+      echo "::warning::xray-core 是 ${HV:-未知}，不在本分支的可编范围内（24.12.31 / 1.8.24）——"
       echo "         检查 diy-part1.sh 的版本映射；xray 25.3.31+ 要 go 1.24，会在编译期报 go.mod 错误"
       ;;
   esac
